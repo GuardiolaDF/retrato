@@ -21,10 +21,14 @@ export default function Station1Capture({ onComplete, updateState }: Props) {
 
   const startCamera = async () => {
     try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 512, height: 512 }, audio: false });
+      const mediaStream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'user', width: { ideal: 512 }, height: { ideal: 512 } }, 
+        audio: false 
+      });
       setStream(mediaStream);
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
+        videoRef.current.play().catch(e => console.error("Play error:", e));
       }
       setStep('camera');
     } catch (err) {
@@ -47,7 +51,12 @@ export default function Station1Capture({ onComplete, updateState }: Props) {
     // Draw initial high-res capture
     canvasRef.current.width = 512;
     canvasRef.current.height = 512;
-    ctx.drawImage(videoRef.current, 0, 0, 512, 512);
+    if (videoRef.current.readyState >= 2) {
+      ctx.drawImage(videoRef.current, 0, 0, 512, 512);
+    } else {
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, 512, 512);
+    }
     
     setStep('collapsing');
     

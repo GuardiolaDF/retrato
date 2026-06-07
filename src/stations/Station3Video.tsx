@@ -20,10 +20,14 @@ export default function Station3Video({ onComplete, updateState }: Props) {
 
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 512, height: 512 }, audio: false });
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'user', width: { ideal: 512 }, height: { ideal: 512 } }, 
+        audio: false 
+      });
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(e => console.error("Play error:", e));
       }
       setStep('recording');
       framesRef.current = [];
@@ -54,6 +58,7 @@ export default function Station3Video({ onComplete, updateState }: Props) {
 
   const captureFrame = () => {
     if (!videoRef.current || !canvasRef.current) return;
+    if (videoRef.current.readyState < 2) return;
     const ctx = canvasRef.current.getContext('2d');
     if (!ctx) return;
     
@@ -73,7 +78,15 @@ export default function Station3Video({ onComplete, updateState }: Props) {
   const collapseFrames = () => {
     setStep('collapsing');
     const frames = framesRef.current;
-    if (frames.length === 0 || !finalCanvasRef.current) return;
+    if (!finalCanvasRef.current) {
+      setStep('done');
+      return;
+    }
+    if (frames.length === 0) {
+      console.warn("No frames were captured!");
+      setStep('done');
+      return;
+    }
     
     const ctx = finalCanvasRef.current.getContext('2d');
     if (!ctx) return;
