@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import type { AppState } from '../App';
 import { Video, ChevronRight } from 'lucide-react';
 
@@ -25,10 +25,6 @@ export default function Station3Video({ onComplete, updateState }: Props) {
         audio: false 
       });
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play().catch(e => console.error("Play error:", e));
-      }
       setStep('recording');
       framesRef.current = [];
 
@@ -55,6 +51,13 @@ export default function Station3Video({ onComplete, updateState }: Props) {
       alert("Se requiere acceso a la cámara para esta obra.");
     }
   };
+
+  useEffect(() => {
+    if (step === 'recording' && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+      videoRef.current.play().catch(e => console.error("Play error:", e));
+    }
+  }, [step]);
 
   const captureFrame = () => {
     if (!videoRef.current || !canvasRef.current) return;

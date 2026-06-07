@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import type { AppState } from '../App';
 import { Camera, Download, ChevronRight } from 'lucide-react';
 
@@ -26,16 +26,19 @@ export default function Station1Capture({ onComplete, updateState }: Props) {
         audio: false 
       });
       setStream(mediaStream);
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-        videoRef.current.play().catch(e => console.error("Play error:", e));
-      }
       setStep('camera');
     } catch (err) {
       console.error("Error accessing camera:", err);
       alert("Se requiere acceso a la cámara para esta obra.");
     }
   };
+
+  useEffect(() => {
+    if (step === 'camera' && videoRef.current && stream) {
+      videoRef.current.srcObject = stream;
+      videoRef.current.play().catch(e => console.error("Play error:", e));
+    }
+  }, [step, stream]);
 
   const captureAndCollapse = () => {
     if (!videoRef.current || !canvasRef.current) return;
