@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+@theme {
+  --color-pure-red: #FF0000;
+  --color-pure-green: #00FF00;
+  --color-pure-blue: #0000FF;
+  --color-pure-black: #000000;
+  --color-pure-white: #FFFFFF;
+  --font-mono: "Space Mono", "Courier New", monospace;
+  --font-sans: Inter, sans-serif;
+}
+
+body {
+  background-color: var(--color-pure-white);
+  color: var(--color-pure-black);
+  font-family: var(--font-mono);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background-color: var(--color-pure-black);
+  color: var(--color-pure-white);
+}
