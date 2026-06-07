@@ -64,7 +64,7 @@ export default function Station2Voice({ onComplete, appState, updateState }: Pro
   };
 
   const playSonification = async () => {
-    if (!appState.audioBlob || !appState.matrixLuma.length) return;
+    if (!appState.audioBlob || !appState.matrixLuma.length || !appState.matrixRGB.length) return;
     
     setStep('playing');
     const arrayBuffer = await appState.audioBlob.arrayBuffer();
@@ -75,96 +75,155 @@ export default function Station2Voice({ onComplete, appState, updateState }: Pro
     const source = ctx.createBufferSource();
     source.buffer = audioBuffer;
 
-    // Analyzer for Envelope Follower
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 256;
     analyserRef.current = analyser;
-    
     source.connect(analyser);
-    // Disconnect from destination to NOT hear the raw voice, only the synth
-    // analyser.connect(ctx.destination); 
 
-    // Synthesis: Let's create an oscillator bank based on the first row of Luma (16 oscillators)
-    // Or, map the Luma matrix to frequency over time.
-    // For simplicity, we use 4 oscillators mapped to the first 4 Luma values of the first row to form a chord.
     const masterGain = ctx.createGain();
-    masterGain.gain.value = 0; // Controlled by envelope
+    masterGain.gain.value = 1.0;
     masterGain.connect(ctx.destination);
 
-    const oscillators: OscillatorNode[] = [];
-    const firstRowLuma = appState.matrixLuma[0] || Array(16).fill(100);
+    // Prepare MediaRecorder to capture the synthesized output
+    const destNode = ctx.createMediaStreamDestination();
+    masterGain.connect(destNode);
+    const synthRecorder = new MediaRecorder(destNode.stream);
+    const synthChunks: Blob[] = [];
+    synthRecorder.ondataavailable = e => { if (e.data.size > 0) synthChunks.push(e.data); };
+    let finalEvents: {time: number, r: number, g: number, b: number}[] = [];
     
-    for (let i = 0; i < 4; i++) {
-      const osc = ctx.createOscillator();
-      // Map luma (0-255) to a frequency (e.g. 100Hz to 1000Hz)
-      const freq = 100 + (firstRowLuma[i] || 100) * 3;
-      osc.frequency.value = freq;
-      osc.type = 'sine';
-      osc.connect(masterGain);
-      osc.start();
-      oscillators.push(osc);
-    }
+    synthRecorder.onstop = () => {
+      const synthAudioBlob = new Blob(synthChunks, { type: 'audio/webm' });
+      updateState({ synthAudioBlob, synthEvents: finalEvents });
+    };
+
+    // Helper to create an FM Voice
+    const createFMVoice = (baseFreq: number) => {
+      const carrier = ctx.createOscillator();
+      const modulator = ctx.createOscillator();
+      const modGain = ctx.createGain();
+      const vca = ctx.createGain();
+
+      carrier.type = 'sine';
+      modulator.type = 'sine';
+      
+      modulator.frequency.value = baseFreq * 2;
+      modGain.gain.value = 100;
+      vca.gain.value = 0;
+
+      modulator.connect(modGain);
+      modGain.connect(carrier.frequency);
+      carrier.connect(vca);
+      vca.connect(masterGain);
+
+      carrier.start();
+      modulator.start();
+
+      return { carrier, modulator, modGain, vca };
+    };
+
+    const voiceR = createFMVoice(50);  // Low
+    const voiceG = createFMVoice(200); // Mid
+    const voiceB = createFMVoice(800); // High
 
     source.start();
+    synthRecorder.start();
 
     const dataArray = new Uint8Array(analyser.frequencyBinCount);
     const canvas = canvasRef.current;
     const canvasCtx = canvas?.getContext('2d');
+
+    // Sequencer state
+    let idxR = 0, idxG = 0, idxB = 0;
+    let accR = 0, accG = 0, accB = 0;
+    const rgb = appState.matrixRGB;
+    const luma = appState.matrixLuma;
+    const events: {time: number, r: number, g: number, b: number}[] = [];
+
+    const getPixel = (idx: number) => {
+      const y = Math.floor(idx / 16);
+      const x = idx % 16;
+      return { r: rgb[y][x][0], g: rgb[y][x][1], b: rgb[y][x][2], l: luma[y][x] };
+    };
 
     const draw = () => {
       if (!canvas || !canvasCtx) return;
       animationRef.current = requestAnimationFrame(draw);
       
       analyser.getByteTimeDomainData(dataArray);
-      
-      // Calculate RMS (Volume Envelope)
       let sum = 0;
       for (let i = 0; i < dataArray.length; i++) {
         const val = (dataArray[i] - 128) / 128;
         sum += val * val;
       }
       const rms = Math.sqrt(sum / dataArray.length);
-      
-      // Map RMS to master gain (Gate / CV)
-      // If rms is very low, gate is closed. If high, gain goes up.
-      const threshold = 0.05;
-      const cv = rms > threshold ? rms * 2 : 0;
-      masterGain.gain.setTargetAtTime(Math.min(cv, 1), ctx.currentTime, 0.05);
+      const cv = rms > 0.05 ? rms * 2 : 0;
+
+      // Update sequencers
+      accR += cv * 0.4 + 0.01;
+      accG += cv * 0.6 + 0.015;
+      accB += cv * 0.8 + 0.02;
+
+      let changed = false;
+      if (accR >= 1) { accR -= 1; idxR = (idxR + 1) % 256; changed = true; }
+      if (accG >= 1) { accG -= 1; idxG = (idxG + 1) % 256; changed = true; }
+      if (accB >= 1) { accB -= 1; idxB = (idxB + 1) % 256; changed = true; }
+
+      if (changed) {
+        events.push({ time: ctx.currentTime, r: idxR, g: idxG, b: idxB });
+      }
+
+      // Apply Matrix Data to Synths
+      const pxR = getPixel(idxR);
+      const pxG = getPixel(idxG);
+      const pxB = getPixel(idxB);
+
+      // Channel R (Low) mapped to Red values
+      voiceR.carrier.frequency.setTargetAtTime(40 + pxR.r * 0.5, ctx.currentTime, 0.05);
+      voiceR.modulator.frequency.setTargetAtTime((40 + pxR.r * 0.5) * (pxR.g / 50 + 0.1), ctx.currentTime, 0.05);
+      voiceR.modGain.gain.setTargetAtTime(pxR.l * 5, ctx.currentTime, 0.05);
+      voiceR.vca.gain.setTargetAtTime(Math.min(cv, 1), ctx.currentTime, 0.02);
+
+      // Channel G (Mid) mapped to Green values
+      voiceG.carrier.frequency.setTargetAtTime(150 + pxG.g * 1.5, ctx.currentTime, 0.05);
+      voiceG.modulator.frequency.setTargetAtTime((150 + pxG.g * 1.5) * (pxG.b / 50 + 0.1), ctx.currentTime, 0.05);
+      voiceG.modGain.gain.setTargetAtTime(pxG.l * 10, ctx.currentTime, 0.05);
+      voiceG.vca.gain.setTargetAtTime(Math.min(cv * 0.8, 1), ctx.currentTime, 0.02);
+
+      // Channel B (Hi) mapped to Blue values
+      voiceB.carrier.frequency.setTargetAtTime(600 + pxB.b * 4, ctx.currentTime, 0.05);
+      voiceB.modulator.frequency.setTargetAtTime((600 + pxB.b * 4) * (pxB.r / 50 + 0.1), ctx.currentTime, 0.05);
+      voiceB.modGain.gain.setTargetAtTime(pxB.l * 15, ctx.currentTime, 0.05);
+      voiceB.vca.gain.setTargetAtTime(Math.min(cv * 0.6, 1), ctx.currentTime, 0.02);
 
       // Visual feedback
-      canvasCtx.fillStyle = '#FFFFFF';
+      canvasCtx.fillStyle = '#111';
       canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
       
-      canvasCtx.lineWidth = 2;
-      canvasCtx.strokeStyle = '#00FF00'; // Pure Green for CV
-      canvasCtx.beginPath();
-      
-      const sliceWidth = canvas.width * 1.0 / dataArray.length;
-      let x = 0;
-      for (let i = 0; i < dataArray.length; i++) {
-        const v = dataArray[i] / 128.0;
-        const y = v * canvas.height / 2;
-        if (i === 0) canvasCtx.moveTo(x, y);
-        else canvasCtx.lineTo(x, y);
-        x += sliceWidth;
-      }
-      canvasCtx.lineTo(canvas.width, canvas.height / 2);
-      canvasCtx.stroke();
-      
-      // Draw Envelope level
-      canvasCtx.fillStyle = 'rgba(0, 255, 0, 0.2)';
-      const envHeight = (cv) * canvas.height;
-      canvasCtx.fillRect(0, canvas.height - envHeight, canvas.width, envHeight);
+      // Draw 3 Playheads in a pseudo grid
+      const drawPlayhead = (idx: number, color: string, yOffset: number) => {
+        const x = (idx % 16) * (canvas.width / 16);
+        const y = Math.floor(idx / 16) * (canvas.height / 16);
+        canvasCtx.fillStyle = color;
+        canvasCtx.fillRect(x, y, canvas.width / 16, canvas.height / 16);
+      };
+
+      drawPlayhead(idxR, `rgba(255, 0, 0, ${cv + 0.2})`, 0);
+      drawPlayhead(idxG, `rgba(0, 255, 0, ${cv + 0.2})`, 0);
+      drawPlayhead(idxB, `rgba(0, 100, 255, ${cv + 0.2})`, 0);
     };
     draw();
 
     source.onended = () => {
-      if (animationRef.current !== null) {
-        cancelAnimationFrame(animationRef.current);
-      }
-      oscillators.forEach(o => o.stop());
-      ctx.close();
-      setStep('recorded'); // loop back or stay
+      if (animationRef.current !== null) cancelAnimationFrame(animationRef.current);
+      voiceR.carrier.stop(); voiceR.modulator.stop();
+      voiceG.carrier.stop(); voiceG.modulator.stop();
+      voiceB.carrier.stop(); voiceB.modulator.stop();
+      
+      finalEvents = [...events];
+      synthRecorder.stop();
+      setTimeout(() => ctx.close(), 500); // Give recorder time to finish
+      setStep('recorded');
     };
   };
 

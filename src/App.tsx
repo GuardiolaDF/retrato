@@ -9,6 +9,8 @@ export type AppState = {
   matrixLuma: number[][];
   matrixRGB: number[][][];
   audioBlob: Blob | null;
+  synthAudioBlob: Blob | null;
+  synthEvents: { time: number, r: number, g: number, b: number }[];
   collapsedImage: string | null;
 };
 
@@ -19,6 +21,8 @@ function App() {
     matrixLuma: [],
     matrixRGB: [],
     audioBlob: null,
+    synthAudioBlob: null,
+    synthEvents: [],
     collapsedImage: null,
   });
 

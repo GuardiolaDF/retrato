@@ -51,11 +51,17 @@ export default function Station1Capture({ onComplete, updateState }: Props) {
       stream.getTracks().forEach(track => track.stop());
     }
     
-    // Draw initial high-res capture
+    // Draw initial high-res capture using natural video dimensions
     canvasRef.current.width = 512;
     canvasRef.current.height = 512;
-    if (videoRef.current.readyState >= 2) {
-      ctx.drawImage(videoRef.current, 0, 0, 512, 512);
+    if (videoRef.current.readyState >= 2 && videoRef.current.videoWidth > 0) {
+      // Calculate crop to center the video
+      const vw = videoRef.current.videoWidth;
+      const vh = videoRef.current.videoHeight;
+      const size = Math.min(vw, vh);
+      const sx = (vw - size) / 2;
+      const sy = (vh - size) / 2;
+      ctx.drawImage(videoRef.current, sx, sy, size, size, 0, 0, 512, 512);
     } else {
       ctx.fillStyle = '#000';
       ctx.fillRect(0, 0, 512, 512);
@@ -82,9 +88,15 @@ export default function Station1Capture({ onComplete, updateState }: Props) {
         tempCanvas.height = currentRes;
         const tempCtx = tempCanvas.getContext('2d');
         if (tempCtx) {
+          // Draw from main to temp (downscale)
           tempCtx.drawImage(canvasRef.current!, 0, 0, currentRes, currentRes);
           // Disable smoothing to get pixelated look
           ctx.imageSmoothingEnabled = false;
+          (ctx as any).webkitImageSmoothingEnabled = false;
+          (ctx as any).mozImageSmoothingEnabled = false;
+          (ctx as any).msImageSmoothingEnabled = false;
+          // Clear and draw from temp to main (upscale)
+          ctx.clearRect(0, 0, 512, 512);
           ctx.drawImage(tempCanvas, 0, 0, currentRes, currentRes, 0, 0, 512, 512);
         }
         i++;
@@ -189,7 +201,7 @@ export default function Station1Capture({ onComplete, updateState }: Props) {
             <canvas 
               ref={canvasRef} 
               className={`w-[300px] h-[300px] md:w-[400px] md:h-[400px] object-cover ${step === 'camera' ? 'hidden' : ''}`}
-              style={{ imageRendering: 'pixelated' }}
+              style={{ imageRendering: 'pixelated', WebkitImageRendering: 'crisp-edges' } as any}
             />
             {step === 'collapsing' && (
               <div className="absolute top-4 left-4 bg-pure-red text-white px-2 py-1 text-xs font-bold uppercase animate-pulse">
