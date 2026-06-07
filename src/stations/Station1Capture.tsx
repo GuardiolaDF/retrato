@@ -46,16 +46,10 @@ export default function Station1Capture({ onComplete, updateState }: Props) {
     const ctx = canvasRef.current.getContext('2d');
     if (!ctx) return;
     
-    // Stop video stream
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-    }
-    
     // Draw initial high-res capture using natural video dimensions
     canvasRef.current.width = 512;
     canvasRef.current.height = 512;
     if (videoRef.current.readyState >= 2 && videoRef.current.videoWidth > 0) {
-      // Calculate crop to center the video
       const vw = videoRef.current.videoWidth;
       const vh = videoRef.current.videoHeight;
       const size = Math.min(vw, vh);
@@ -66,12 +60,19 @@ export default function Station1Capture({ onComplete, updateState }: Props) {
       ctx.fillStyle = '#000';
       ctx.fillRect(0, 0, 512, 512);
     }
+
+    // Stop video stream AFTER drawing to avoid blanking
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+    }
     
     setStep('collapsing');
     
-    // Save original image to state
+    // Save original image to state and create an Image object for safe downsampling
     const originalDataUrl = canvasRef.current.toDataURL('image/jpeg');
     updateState({ originalImage: originalDataUrl });
+    const originalImg = new Image();
+    originalImg.src = originalDataUrl;
 
     // Start collapsing animation
     const resolutions = [256, 128, 64, 32, 16];
@@ -87,14 +88,16 @@ export default function Station1Capture({ onComplete, updateState }: Props) {
         tempCanvas.width = currentRes;
         tempCanvas.height = currentRes;
         const tempCtx = tempCanvas.getContext('2d');
-        if (tempCtx) {
-          // Draw from main to temp (downscale)
-          tempCtx.drawImage(canvasRef.current!, 0, 0, currentRes, currentRes);
+        if (tempCtx && originalImg.complete) {
+          // Draw from original to temp (downscale safely)
+          tempCtx.drawImage(originalImg, 0, 0, currentRes, currentRes);
+          
           // Disable smoothing to get pixelated look
           ctx.imageSmoothingEnabled = false;
           (ctx as any).webkitImageSmoothingEnabled = false;
           (ctx as any).mozImageSmoothingEnabled = false;
           (ctx as any).msImageSmoothingEnabled = false;
+          
           // Clear and draw from temp to main (upscale)
           ctx.clearRect(0, 0, 512, 512);
           ctx.drawImage(tempCanvas, 0, 0, currentRes, currentRes, 0, 0, 512, 512);

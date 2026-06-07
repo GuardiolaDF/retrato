@@ -201,16 +201,16 @@ export default function Station2Voice({ onComplete, appState, updateState }: Pro
       canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
       
       // Draw 3 Playheads in a pseudo grid
-      const drawPlayhead = (idx: number, color: string, yOffset: number) => {
+      const drawPlayhead = (idx: number, color: string) => {
         const x = (idx % 16) * (canvas.width / 16);
         const y = Math.floor(idx / 16) * (canvas.height / 16);
         canvasCtx.fillStyle = color;
         canvasCtx.fillRect(x, y, canvas.width / 16, canvas.height / 16);
       };
 
-      drawPlayhead(idxR, `rgba(255, 0, 0, ${cv + 0.2})`, 0);
-      drawPlayhead(idxG, `rgba(0, 255, 0, ${cv + 0.2})`, 0);
-      drawPlayhead(idxB, `rgba(0, 100, 255, ${cv + 0.2})`, 0);
+      drawPlayhead(idxR, `rgba(255, 0, 0, ${cv + 0.2})`);
+      drawPlayhead(idxG, `rgba(0, 255, 0, ${cv + 0.2})`);
+      drawPlayhead(idxB, `rgba(0, 100, 255, ${cv + 0.2})`);
     };
     draw();
 
