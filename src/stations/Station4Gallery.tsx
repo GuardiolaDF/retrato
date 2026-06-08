@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AppState } from '../App';
-import { RefreshCw, UploadCloud, Play, Pause, Loader2 } from 'lucide-react';
+import { RefreshCw, UploadCloud, Play, Pause, Loader2, Image as ImageIcon } from 'lucide-react';
 import { storage, db } from '../lib/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 interface Props {
   appState: AppState;
+  onShowGallery: () => void;
 }
 
-export default function Station4Gallery({ appState }: Props) {
+export default function Station4Gallery({ appState, onShowGallery }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -18,6 +19,7 @@ export default function Station4Gallery({ appState }: Props) {
   const [isDecoding, setIsDecoding] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [artistName, setArtistName] = useState('');
 
   // Stop everything on unmount
   useEffect(() => {
@@ -285,8 +287,6 @@ export default function Station4Gallery({ appState }: Props) {
       const canvas = canvasRef.current;
       const ctx = canvas.getContext('2d');
       if (ctx) {
-        // Only draw if the canvas is blank or we explicitly want to reset
-        // To keep it simple, we just draw the image on mount.
         const img = new Image();
         img.src = appState.collapsedImage;
         img.onload = () => {
@@ -299,9 +299,8 @@ export default function Station4Gallery({ appState }: Props) {
   const handleSave = async () => {
     if (!canvasRef.current || isUploading) return;
     
-    // Check if Firebase is configured
-    if (!import.meta.env.VITE_FIREBASE_API_KEY) {
-      alert('Error: Faltan configurar las credenciales de Firebase en el archivo .env.local');
+    if (!artistName.trim()) {
+      alert('Por favor, escribí tu nombre antes de subir la obra.');
       return;
     }
 
@@ -327,15 +326,24 @@ export default function Station4Gallery({ appState }: Props) {
       // Save to Firestore
       await addDoc(collection(db, 'obras'), {
         imageUrl: downloadURL,
+        artistName: artistName.trim(),
         createdAt: serverTimestamp(),
-        title: 'Exposición Viva - Retrato Generativo'
+        title: 'Autoretrato Deconstruido'
       });
 
       setUploadSuccess(true);
       alert('¡Obra subida exitosamente a la Galería!');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error al subir a Firebase:', error);
-      alert('Ocurrió un error al subir la obra. Revisa la consola para más detalles.');
+      
+      // Provide more specific error messages
+      if (error?.code === 'storage/unauthorized' || error?.code === 'permission-denied') {
+        alert('Error de permisos en Firebase. Necesitás habilitar las reglas de escritura en Firebase Console → Storage → Rules y Firestore → Rules.');
+      } else if (error?.message?.includes('fetch')) {
+        alert('Error de red. Verificá tu conexión a internet.');
+      } else {
+        alert(`Error al subir: ${error?.message || 'Error desconocido'}. Revisá la consola del navegador (F12) para más detalles.`);
+      }
     } finally {
       setIsUploading(false);
     }
@@ -380,20 +388,41 @@ export default function Station4Gallery({ appState }: Props) {
          </div>
       </div>
 
-      <div className="flex gap-6 mt-12 w-full justify-center">
+      {/* Artist name input */}
+      <div className="w-full max-w-md space-y-2">
+        <label htmlFor="artist-name" className="block text-xs uppercase tracking-widest font-bold text-gray-600">
+          Tu Nombre (firma de la obra)
+        </label>
+        <input
+          id="artist-name"
+          type="text"
+          value={artistName}
+          onChange={(e) => setArtistName(e.target.value)}
+          placeholder="Escribí tu nombre aquí..."
+          className="w-full px-4 py-3 border-2 border-pure-black font-mono text-sm focus:outline-none focus:ring-2 focus:ring-pure-red focus:border-pure-red transition-colors placeholder:text-gray-400"
+        />
+      </div>
+
+      <div className="flex flex-wrap gap-4 mt-12 w-full justify-center">
           <button 
             onClick={handleSave}
             disabled={isUploading || isPlaying}
             className="flex items-center space-x-2 px-6 py-3 border-2 border-pure-black hover:bg-pure-black hover:text-white disabled:opacity-50 transition-colors uppercase tracking-widest text-sm font-bold"
           >
             {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UploadCloud className="w-4 h-4" />}
-            <span>{isUploading ? 'Subiendo...' : (uploadSuccess ? 'Subido con éxito' : 'Subir a Galería')}</span>
+            <span>{isUploading ? 'Subiendo...' : (uploadSuccess ? '✓ Subido' : 'Subir a Galería')}</span>
+          </button>
+          <button 
+            onClick={onShowGallery}
+            className="flex items-center space-x-2 px-6 py-3 border-2 border-pure-black hover:bg-pure-black hover:text-white transition-colors uppercase tracking-widest text-sm font-bold"
+          >
+            <ImageIcon className="w-4 h-4" /> <span>Ver Galería</span>
           </button>
           <button 
             onClick={handleRestart}
             className="flex items-center space-x-2 px-6 py-3 border-2 border-pure-red text-pure-red hover:bg-pure-red hover:text-white transition-colors uppercase tracking-widest text-sm font-bold"
           >
-            <RefreshCw className="w-4 h-4" /> <span>Descartar y Reiniciar</span>
+            <RefreshCw className="w-4 h-4" /> <span>Reiniciar</span>
           </button>
       </div>
     </div>
