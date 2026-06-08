@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react';
-import { db } from '../lib/firebase';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
 import { ArrowLeft } from 'lucide-react';
 
 interface Obra {
   id: string;
-  imageUrl: string;
-  artistName: string;
-  createdAt: any;
+  image_url: string;
+  artist_name: string;
+  created_at: string;
   title: string;
 }
 
@@ -20,27 +19,41 @@ export default function GalleryPage({ onBack }: Props) {
   const [loading, setLoading] = useState(true);
   const [selectedObra, setSelectedObra] = useState<Obra | null>(null);
 
-  useEffect(() => {
-    const q = query(collection(db, 'obras'), orderBy('createdAt', 'desc'));
-    
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const items: Obra[] = [];
-      snapshot.forEach((doc) => {
-        items.push({ id: doc.id, ...doc.data() } as Obra);
-      });
-      setObras(items);
-      setLoading(false);
-    }, (error) => {
-      console.error('Error loading gallery:', error);
-      setLoading(false);
-    });
+  const fetchObras = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('obras')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-    return () => unsubscribe();
+      if (error) throw error;
+      setObras(data || []);
+    } catch (error) {
+      console.error('Error loading gallery:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchObras();
+
+    // Optionally subscribe to new inserts if realtime is enabled on the table
+    const subscription = supabase
+      .channel('public:obras')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'obras' }, payload => {
+        setObras(current => [payload.new as Obra, ...current]);
+      })
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
-  const formatDate = (timestamp: any) => {
-    if (!timestamp?.toDate) return '';
-    const d = timestamp.toDate();
+  const formatDate = (isoString: string) => {
+    if (!isoString) return '';
+    const d = new Date(isoString);
     return d.toLocaleDateString('es-AR', { 
       day: '2-digit', 
       month: 'short', 
@@ -109,8 +122,8 @@ export default function GalleryPage({ onBack }: Props) {
               {/* Image */}
               <div className="aspect-square overflow-hidden">
                 <img
-                  src={obra.imageUrl}
-                  alt={`Obra de ${obra.artistName}`}
+                  src={obra.image_url}
+                  alt={`Obra de ${obra.artist_name}`}
                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                   loading="lazy"
                 />
@@ -119,20 +132,20 @@ export default function GalleryPage({ onBack }: Props) {
               {/* Info overlay */}
               <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-4 pt-12 translate-y-full group-hover:translate-y-0 transition-transform duration-300">
                 <p className="text-white font-bold text-sm uppercase tracking-widest">
-                  {obra.artistName}
+                  {obra.artist_name}
                 </p>
                 <p className="text-white/60 text-[10px] uppercase tracking-widest mt-1">
-                  {formatDate(obra.createdAt)}
+                  {formatDate(obra.created_at)}
                 </p>
               </div>
 
               {/* Always-visible tag */}
               <div className="absolute top-0 left-0 right-0 p-3 flex justify-between items-start">
                 <span className="bg-pure-black text-white text-[9px] uppercase tracking-widest px-2 py-1 font-bold">
-                  {obra.artistName}
+                  {obra.artist_name}
                 </span>
                 <span className="bg-white/80 text-black text-[9px] uppercase tracking-widest px-2 py-1">
-                  {formatDate(obra.createdAt)}
+                  {formatDate(obra.created_at)}
                 </span>
               </div>
             </div>
@@ -151,16 +164,16 @@ export default function GalleryPage({ onBack }: Props) {
             onClick={(e) => e.stopPropagation()}
           >
             <img
-              src={selectedObra.imageUrl}
-              alt={`Obra de ${selectedObra.artistName}`}
+              src={selectedObra.image_url}
+              alt={`Obra de ${selectedObra.artist_name}`}
               className="w-full aspect-square object-cover"
             />
             <div className="p-6 border-t-4 border-pure-black">
               <p className="text-xl font-bold uppercase tracking-widest">
-                {selectedObra.artistName}
+                {selectedObra.artist_name}
               </p>
               <p className="text-xs text-gray-500 uppercase tracking-widest mt-2">
-                {formatDate(selectedObra.createdAt)}
+                {formatDate(selectedObra.created_at)}
               </p>
               <p className="text-xs text-gray-400 uppercase tracking-widest mt-1">
                 Autoretrato Deconstruido

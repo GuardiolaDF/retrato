@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AppState } from '../App';
 import { RefreshCw, UploadCloud, Play, Pause, Loader2, Image as ImageIcon } from 'lucide-react';
-import { storage, db } from '../lib/firebase';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
 
 interface Props {
   appState: AppState;
@@ -315,35 +313,37 @@ export default function Station4Gallery({ appState, onShowGallery }: Props) {
 
       if (!blob) throw new Error('No se pudo generar la imagen');
 
-      // Upload to Storage
-      const filename = `obras/obra_${Date.now()}.jpg`;
-      const storageRef = ref(storage, filename);
-      await uploadBytes(storageRef, blob);
+      // Upload to Supabase Storage
+      const filename = `obra_${Date.now()}.jpg`;
+      const { error: storageError } = await supabase.storage
+        .from('obras')
+        .upload(filename, blob, { contentType: 'image/jpeg' });
+        
+      if (storageError) throw storageError;
       
-      // Get Download URL
-      const downloadURL = await getDownloadURL(storageRef);
+      // Get Public URL
+      const { data: publicUrlData } = supabase.storage
+        .from('obras')
+        .getPublicUrl(filename);
 
-      // Save to Firestore
-      await addDoc(collection(db, 'obras'), {
-        imageUrl: downloadURL,
-        artistName: artistName.trim(),
-        createdAt: serverTimestamp(),
-        title: 'Autoretrato Deconstruido'
-      });
+      // Save to Supabase Database
+      const { error: dbError } = await supabase
+        .from('obras')
+        .insert([
+          { 
+            image_url: publicUrlData.publicUrl,
+            artist_name: artistName.trim(),
+            title: 'Autoretrato Deconstruido'
+          }
+        ]);
+        
+      if (dbError) throw dbError;
 
       setUploadSuccess(true);
       alert('¡Obra subida exitosamente a la Galería!');
     } catch (error: any) {
-      console.error('Error al subir a Firebase:', error);
-      
-      // Provide more specific error messages
-      if (error?.code === 'storage/unauthorized' || error?.code === 'permission-denied') {
-        alert('Error de permisos en Firebase. Necesitás habilitar las reglas de escritura en Firebase Console → Storage → Rules y Firestore → Rules.');
-      } else if (error?.message?.includes('fetch')) {
-        alert('Error de red. Verificá tu conexión a internet.');
-      } else {
-        alert(`Error al subir: ${error?.message || 'Error desconocido'}. Revisá la consola del navegador (F12) para más detalles.`);
-      }
+      console.error('Error al subir a Supabase:', error);
+      alert(`Ocurrió un error al subir: ${error.message || 'Desconocido'}. Verifica las políticas de Supabase.`);
     } finally {
       setIsUploading(false);
     }
