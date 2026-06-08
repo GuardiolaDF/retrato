@@ -129,7 +129,19 @@ export default function Station4Gallery({ appState }: Props) {
       let lastStep = -1;
       const particles: {x: number, y: number, color: string, life: number}[] = [];
 
+      const activeBuffer = document.createElement('canvas');
+      activeBuffer.width = 512;
+      activeBuffer.height = 512;
+      const activeCtx = activeBuffer.getContext('2d');
+
+      const tempBuffer = document.createElement('canvas');
+      tempBuffer.width = 512;
+      tempBuffer.height = 512;
+      const tempCtx = tempBuffer.getContext('2d');
+
       img.onload = () => {
+        if (activeCtx) activeCtx.drawImage(img, 0, 0, 512, 512);
+
         const draw = () => {
           if (audioCtxRef.current !== ctx || didEnd) return; // Stale instance
           animationRef.current = requestAnimationFrame(draw);
@@ -187,48 +199,58 @@ export default function Station4Gallery({ appState }: Props) {
           voiceB.modGain.gain.setTargetAtTime(pxB.l * 15, ctx.currentTime, 0.05);
           voiceB.vca.gain.setTargetAtTime(Math.min(cv * 0.6, 1), ctx.currentTime, 0.2); // Longer release
 
-          // Render Image Background
-          canvasCtx.globalCompositeOperation = 'source-over';
-          canvasCtx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
           const cellW = canvas.width / 16;
           const cellH = canvas.height / 16;
 
-          // Draw 16x16 grid of dots
-          canvasCtx.fillStyle = '#999999';
-          for (let y = 0; y < 16; y++) {
-            for (let x = 0; x < 16; x++) {
-              canvasCtx.beginPath();
-              canvasCtx.arc((x + 0.5) * cellW, (y + 0.5) * cellH, 2, 0, Math.PI * 2);
-              canvasCtx.fill();
+          // Process cumulative deformations
+          if (tempCtx && activeCtx) {
+            tempCtx.globalCompositeOperation = 'source-over';
+            tempCtx.drawImage(activeBuffer, 0, 0);
+
+            for (let i = particles.length - 1; i >= 0; i--) {
+              const p = particles[i];
+              p.life *= 0.97; // Slower decay
+              
+              if (p.life < 0.01) {
+                particles.splice(i, 1);
+                continue;
+              }
+
+              const cx = (p.x + 0.5) * cellW;
+              const cy = (p.y + 0.5) * cellH;
+              const radius = cellW * 5.0; // Large area of effect
+
+              activeCtx.save();
+              activeCtx.beginPath();
+              activeCtx.arc(cx, cy, radius, 0, Math.PI * 2);
+              activeCtx.clip();
+
+              activeCtx.globalAlpha = 0.5 * p.life; // Gradual intensity based on ADSR envelope
+              
+              if (p.color === '255, 0, 0') {
+                // Red: Bulge/Magnify
+                activeCtx.translate(cx, cy);
+                const scale = 1.0 + (0.02 * p.life);
+                activeCtx.scale(scale, scale);
+                activeCtx.translate(-cx, -cy);
+              } else if (p.color === '0, 255, 0') {
+                // Green: Smudge/Shift
+                activeCtx.translate(3 * p.life, -3 * p.life);
+              } else if (p.color === '0, 0, 255') {
+                // Blue: Twirl/Rotate
+                activeCtx.translate(cx, cy);
+                activeCtx.rotate(0.05 * p.life);
+                activeCtx.translate(-cx, -cy);
+              }
+
+              activeCtx.drawImage(tempBuffer, 0, 0);
+              activeCtx.restore();
             }
           }
 
-          // Additive blending for circles (Screen mode creates CMY)
-          canvasCtx.globalCompositeOperation = 'screen';
-          for (let i = particles.length - 1; i >= 0; i--) {
-            const p = particles[i];
-            p.life *= 0.90; // Decay matching the audio envelope
-            
-            if (p.life < 0.01) {
-              particles.splice(i, 1);
-              continue;
-            }
-
-            const cx = (p.x + 0.5) * cellW;
-            const cy = (p.y + 0.5) * cellH;
-            const radius = cellW * 2.5; // Diameter is larger to overlap
-
-            const grad = canvasCtx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-            grad.addColorStop(0, `rgba(${p.color}, ${p.life})`);
-            grad.addColorStop(1, `rgba(${p.color}, 0)`);
-
-            canvasCtx.fillStyle = grad;
-            canvasCtx.beginPath();
-            canvasCtx.arc(cx, cy, radius, 0, Math.PI * 2);
-            canvasCtx.fill();
-          }
+          // Render the deformed active buffer to the screen
           canvasCtx.globalCompositeOperation = 'source-over';
+          canvasCtx.drawImage(activeBuffer, 0, 0, canvas.width, canvas.height);
         };
         draw();
       };

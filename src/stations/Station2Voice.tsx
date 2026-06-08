@@ -236,7 +236,7 @@ export default function Station2Voice({ onComplete, appState, updateState }: Pro
       canvasCtx.globalCompositeOperation = 'screen';
       for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];
-        p.life *= 0.90; // Decay matching the audio envelope
+        p.life *= 0.97; // Slower decay for smooth transitions
         
         if (p.life < 0.01) {
           particles.splice(i, 1);
@@ -245,7 +245,7 @@ export default function Station2Voice({ onComplete, appState, updateState }: Pro
 
         const cx = (p.x + 0.5) * cellW;
         const cy = (p.y + 0.5) * cellH;
-        const radius = cellW * 2.5; // Diameter is larger to overlap
+        const radius = cellW * 5.0; // Double the size (was 2.5)
 
         const grad = canvasCtx.createRadialGradient(cx, cy, 0, cx, cy, radius);
         grad.addColorStop(0, `rgba(${p.color}, ${p.life})`);
@@ -257,6 +257,25 @@ export default function Station2Voice({ onComplete, appState, updateState }: Pro
         canvasCtx.fill();
       }
       canvasCtx.globalCompositeOperation = 'source-over';
+
+      // Draw Waveform Overlay
+      canvasCtx.lineWidth = 2;
+      canvasCtx.strokeStyle = 'rgba(0, 255, 0, 0.8)';
+      canvasCtx.beginPath();
+      const sliceWidth = canvas.width / dataArray.length;
+      let waveX = 0;
+      for (let i = 0; i < dataArray.length; i++) {
+        const v = dataArray[i] / 128.0;
+        const waveY = (v * canvas.height) / 2;
+
+        if (i === 0) {
+          canvasCtx.moveTo(waveX, waveY);
+        } else {
+          canvasCtx.lineTo(waveX, waveY);
+        }
+        waveX += sliceWidth;
+      }
+      canvasCtx.stroke();
     };
     draw();
 
