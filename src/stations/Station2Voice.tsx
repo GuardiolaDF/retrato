@@ -147,11 +147,16 @@ export default function Station2Voice({ onComplete, appState, updateState }: Pro
       return { r: rgb[y][x][0], g: rgb[y][x][1], b: rgb[y][x][2], l: luma[y][x] };
     };
 
-    // Create 3 independent paths sorted by color intensity to ensure all pixels are played in a chaotic but structured way
+    // Create 3 independent paths using a chaotic deterministic hash of the pixel values.
+    // This ensures every slightly different photo produces a radically different sequence and sonic landscape.
     const indices = Array.from({length: 256}, (_, i) => i);
-    const pathR = [...indices].sort((a, b) => getPixel(a).r - getPixel(b).r);
-    const pathG = [...indices].sort((a, b) => getPixel(a).g - getPixel(b).g);
-    const pathB = [...indices].sort((a, b) => getPixel(a).b - getPixel(b).b);
+    const getChaos = (p: {r: number, g: number, b: number, l: number}, seed: number) => {
+      const val = Math.sin(p.r * 12.9898 + p.g * 78.233 + p.b * 37.719 + seed) * 43758.5453;
+      return val - Math.floor(val);
+    };
+    const pathR = [...indices].sort((a, b) => getChaos(getPixel(a), 1) - getChaos(getPixel(b), 1));
+    const pathG = [...indices].sort((a, b) => getChaos(getPixel(a), 2) - getChaos(getPixel(b), 2));
+    const pathB = [...indices].sort((a, b) => getChaos(getPixel(a), 3) - getChaos(getPixel(b), 3));
 
     const startTime = ctx.currentTime;
     let didEnd = false;
