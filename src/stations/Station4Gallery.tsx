@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AppState } from '../App';
-import { RefreshCw, UploadCloud, Play, Pause } from 'lucide-react';
+import { RefreshCw, UploadCloud, Play, Pause, Loader2 } from 'lucide-react';
+import { storage, db } from '../lib/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 interface Props {
   appState: AppState;
@@ -13,6 +16,8 @@ export default function Station4Gallery({ appState }: Props) {
   
   const [isPlaying, setIsPlaying] = useState(false);
   const [isDecoding, setIsDecoding] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadSuccess, setUploadSuccess] = useState(false);
 
   // Stop everything on unmount
   useEffect(() => {
@@ -235,17 +240,17 @@ export default function Station4Gallery({ appState }: Props) {
               
               if (p.color === '255, 0, 0') {
                 // Red: Licuar (Smudge/Shift)
-                activeCtx.translate(4 * p.life, 4 * p.life);
+                activeCtx.translate(2 * p.life, 2 * p.life); // Was 4
               } else if (p.color === '0, 255, 0') {
                 // Green: Ojo de Pez (Bulge/Expand)
                 activeCtx.translate(cx, cy);
-                const scale = 1.0 + (0.05 * p.life);
+                const scale = 1.0 + (0.025 * p.life); // Was 0.05
                 activeCtx.scale(scale, scale);
                 activeCtx.translate(-cx, -cy);
               } else if (p.color === '0, 0, 255') {
                 // Blue: Pellizcar (Pinch/Shrink)
                 activeCtx.translate(cx, cy);
-                const scale = 1.0 - (0.05 * p.life);
+                const scale = 1.0 - (0.025 * p.life); // Was 0.05
                 activeCtx.scale(scale, scale);
                 activeCtx.translate(-cx, -cy);
               }
@@ -269,12 +274,14 @@ export default function Station4Gallery({ appState }: Props) {
     }
   };
 
-  // Draw the image immediately before play is pressed
+  // Draw the image initially when the component mounts or the image changes
   useEffect(() => {
-    if (!isPlaying && appState.collapsedImage && canvasRef.current) {
+    if (appState.collapsedImage && canvasRef.current) {
       const canvas = canvasRef.current;
       const ctx = canvas.getContext('2d');
       if (ctx) {
+        // Only draw if the canvas is blank or we explicitly want to reset
+        // To keep it simple, we just draw the image on mount.
         const img = new Image();
         img.src = appState.collapsedImage;
         img.onload = () => {
@@ -282,10 +289,51 @@ export default function Station4Gallery({ appState }: Props) {
         };
       }
     }
-  }, [isPlaying, appState.collapsedImage]);
+  }, [appState.collapsedImage]);
 
-  const handleSave = () => {
-    alert('Subida a repositorio Firebase simulada. (Configura tus credenciales en Firebase para activarlo).');
+  const handleSave = async () => {
+    if (!canvasRef.current || isUploading) return;
+    
+    // Check if Firebase is configured
+    if (!import.meta.env.VITE_FIREBASE_API_KEY) {
+      alert('Error: Faltan configurar las credenciales de Firebase en el archivo .env.local');
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadSuccess(false);
+
+    try {
+      // Get image blob from canvas
+      const blob = await new Promise<Blob | null>((resolve) => {
+        canvasRef.current?.toBlob(resolve, 'image/jpeg', 0.9);
+      });
+
+      if (!blob) throw new Error('No se pudo generar la imagen');
+
+      // Upload to Storage
+      const filename = `obras/obra_${Date.now()}.jpg`;
+      const storageRef = ref(storage, filename);
+      await uploadBytes(storageRef, blob);
+      
+      // Get Download URL
+      const downloadURL = await getDownloadURL(storageRef);
+
+      // Save to Firestore
+      await addDoc(collection(db, 'obras'), {
+        imageUrl: downloadURL,
+        createdAt: serverTimestamp(),
+        title: 'Exposición Viva - Retrato Generativo'
+      });
+
+      setUploadSuccess(true);
+      alert('¡Obra subida exitosamente a la Galería!');
+    } catch (error) {
+      console.error('Error al subir a Firebase:', error);
+      alert('Ocurrió un error al subir la obra. Revisa la consola para más detalles.');
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const handleRestart = () => {
@@ -330,9 +378,11 @@ export default function Station4Gallery({ appState }: Props) {
       <div className="flex gap-6 mt-12 w-full justify-center">
           <button 
             onClick={handleSave}
-            className="flex items-center space-x-2 px-6 py-3 border-2 border-pure-black hover:bg-pure-black hover:text-white transition-colors uppercase tracking-widest text-sm font-bold"
+            disabled={isUploading || isPlaying}
+            className="flex items-center space-x-2 px-6 py-3 border-2 border-pure-black hover:bg-pure-black hover:text-white disabled:opacity-50 transition-colors uppercase tracking-widest text-sm font-bold"
           >
-            <UploadCloud className="w-4 h-4" /> <span>Subir a Galería</span>
+            {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UploadCloud className="w-4 h-4" />}
+            <span>{isUploading ? 'Subiendo...' : (uploadSuccess ? 'Subido con éxito' : 'Subir a Galería')}</span>
           </button>
           <button 
             onClick={handleRestart}
