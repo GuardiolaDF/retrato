@@ -10,7 +10,7 @@ interface Props {
 
 export default function Station2Voice({ onComplete, appState, updateState }: Props) {
   const [step, setStep] = useState<'intro' | 'recording' | 'recorded' | 'playing'>('intro');
-  const [timeLeft, setTimeLeft] = useState(20);
+  const [timeLeft, setTimeLeft] = useState(16);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -40,7 +40,7 @@ export default function Station2Voice({ onComplete, appState, updateState }: Pro
       setStep('recording');
       
       // Timer
-      let t = 20;
+      let t = 16;
       setTimeLeft(t);
       const timer = setInterval(() => {
         t -= 1;
@@ -84,20 +84,8 @@ export default function Station2Voice({ onComplete, appState, updateState }: Pro
     masterGain.gain.value = 1.0;
     masterGain.connect(ctx.destination);
 
-    // Prepare MediaRecorder to capture the synthesized output
-    const destNode = ctx.createMediaStreamDestination();
-    masterGain.connect(destNode);
-    // Do NOT specify type to allow Safari to use its native mp4 codec
-    const synthRecorder = new MediaRecorder(destNode.stream);
-    const synthChunks: Blob[] = [];
-    synthRecorder.ondataavailable = e => { if (e.data.size > 0) synthChunks.push(e.data); };
-    let finalEvents: {time: number, r: number, g: number, b: number}[] = [];
-    
-    synthRecorder.onstop = () => {
-      const type = synthChunks[0]?.type || '';
-      const synthAudioBlob = new Blob(synthChunks, { type });
-      updateState({ synthAudioBlob, synthEvents: finalEvents });
-    };
+    // We no longer record the synth. Station 4 will generate it live from the voice blob.
+    // This avoids Safari MediaRecorder audio decoding bugs completely.
 
     // Helper to create an FM Voice
     const createFMVoice = (baseFreq: number) => {
@@ -130,7 +118,6 @@ export default function Station2Voice({ onComplete, appState, updateState }: Pro
 
     source.loop = true;
     source.start();
-    synthRecorder.start();
 
     const dataArray = new Uint8Array(analyser.frequencyBinCount);
     const canvas = canvasRef.current;
@@ -142,7 +129,6 @@ export default function Station2Voice({ onComplete, appState, updateState }: Pro
     let stepsR = 0, stepsG = 0, stepsB = 0;
     const rgb = appState.matrixRGB;
     const luma = appState.matrixLuma;
-    const events: {time: number, r: number, g: number, b: number}[] = [];
 
     const getPixel = (idx: number) => {
       const y = Math.floor(idx / 16);
@@ -168,14 +154,9 @@ export default function Station2Voice({ onComplete, appState, updateState }: Pro
       accG += cv * 0.6 + 0.015;
       accB += cv * 0.8 + 0.02;
 
-      let changed = false;
-      if (accR >= 1) { accR -= 1; idxR = (idxR + 1) % 256; stepsR++; changed = true; }
-      if (accG >= 1) { accG -= 1; idxG = (idxG + 1) % 256; stepsG++; changed = true; }
-      if (accB >= 1) { accB -= 1; idxB = (idxB + 1) % 256; stepsB++; changed = true; }
-
-      if (changed) {
-        events.push({ time: ctx.currentTime, r: idxR, g: idxG, b: idxB });
-      }
+      if (accR >= 1) { accR -= 1; idxR = (idxR + 1) % 256; stepsR++; }
+      if (accG >= 1) { accG -= 1; idxG = (idxG + 1) % 256; stepsG++; }
+      if (accB >= 1) { accB -= 1; idxB = (idxB + 1) % 256; stepsB++; }
 
       if (stepsR >= 256 && stepsG >= 256 && stepsB >= 256) {
         source.stop(); // trigger onended
@@ -228,9 +209,7 @@ export default function Station2Voice({ onComplete, appState, updateState }: Pro
       voiceG.carrier.stop(); voiceG.modulator.stop();
       voiceB.carrier.stop(); voiceB.modulator.stop();
       
-      finalEvents = [...events];
-      synthRecorder.stop();
-      setTimeout(() => ctx.close(), 500); // Give recorder time to finish
+      setTimeout(() => ctx.close(), 100);
       setStep('recorded');
     };
   };
@@ -258,7 +237,7 @@ export default function Station2Voice({ onComplete, appState, updateState }: Pro
             className="group flex items-center justify-center space-x-3 mx-auto px-8 py-4 border-2 border-pure-black hover:bg-pure-black hover:text-pure-white transition-all duration-300 uppercase tracking-widest font-bold"
           >
             <Mic className="w-6 h-6" />
-            <span>Grabar Voz (20s)</span>
+            <span>Grabar Voz (16s)</span>
           </button>
         </div>
       )}

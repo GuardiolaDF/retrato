@@ -10,127 +10,197 @@ export default function Station4Gallery({ appState }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const sourceRef = useRef<AudioBufferSourceNode | null>(null);
-  const startTimeRef = useRef<number>(0);
   
   const [isPlaying, setIsPlaying] = useState(false);
-  const [audioBuffer, setAudioBuffer] = useState<AudioBuffer | null>(null);
   const [isDecoding, setIsDecoding] = useState(false);
 
+  // Stop everything on unmount
   useEffect(() => {
-    if (appState.synthAudioBlob) {
-      setIsDecoding(true);
+    return () => {
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      if (audioCtxRef.current) audioCtxRef.current.close();
+    };
+  }, []);
+
+  const togglePlay = async () => {
+    if (isPlaying) {
+      if (audioCtxRef.current) {
+        audioCtxRef.current.close();
+        audioCtxRef.current = null;
+      }
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      setIsPlaying(false);
+      return;
+    }
+
+    if (!appState.audioBlob || !appState.matrixRGB.length || !appState.matrixLuma.length) return;
+
+    setIsDecoding(true);
+    try {
+      const arrayBuffer = await appState.audioBlob.arrayBuffer();
       const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
       audioCtxRef.current = ctx;
-      
-      appState.synthAudioBlob.arrayBuffer().then(buffer => {
-        ctx.decodeAudioData(buffer, (decoded) => {
-          setAudioBuffer(decoded);
-          setIsDecoding(false);
-        }, (err) => {
-          console.error("Audio decode error:", err);
-          setIsDecoding(false);
-        });
-      });
 
-      return () => {
-        ctx.close();
-      };
-    }
-  }, [appState.synthAudioBlob]);
-
-  const togglePlay = () => {
-    if (!audioBuffer || !audioCtxRef.current) return;
-    const ctx = audioCtxRef.current;
-    
-    if (isPlaying) {
-      if (sourceRef.current) {
-        sourceRef.current.stop();
-        sourceRef.current = null;
-      }
-      setIsPlaying(false);
-    } else {
-      // AudioContext needs to be resumed on Safari
-      if (ctx.state === 'suspended') {
-        ctx.resume();
-      }
-      
+      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
       const source = ctx.createBufferSource();
       source.buffer = audioBuffer;
       source.loop = true;
-      source.connect(ctx.destination);
+
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+
+      const masterGain = ctx.createGain();
+      masterGain.gain.value = 1.0;
+      masterGain.connect(ctx.destination);
+
+      // Helper to create an FM Voice
+      const createFMVoice = (baseFreq: number) => {
+        const carrier = ctx.createOscillator();
+        const modulator = ctx.createOscillator();
+        const modGain = ctx.createGain();
+        const vca = ctx.createGain();
+
+        carrier.type = 'sine';
+        modulator.type = 'sine';
+        
+        modulator.frequency.value = baseFreq * 2;
+        modGain.gain.value = 100;
+        vca.gain.value = 0;
+
+        modulator.connect(modGain);
+        modGain.connect(carrier.frequency);
+        carrier.connect(vca);
+        vca.connect(masterGain);
+
+        carrier.start();
+        modulator.start();
+
+        return { carrier, modulator, modGain, vca };
+      };
+
+      const voiceR = createFMVoice(50);  // Low
+      const voiceG = createFMVoice(200); // Mid
+      const voiceB = createFMVoice(800); // High
+
       source.start();
-      sourceRef.current = source;
-      startTimeRef.current = ctx.currentTime;
+      setIsDecoding(false);
       setIsPlaying(true);
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      const canvas = canvasRef.current;
+      const canvasCtx = canvas?.getContext('2d');
+
+      if (!canvas || !canvasCtx || !appState.collapsedImage) return;
+
+      const img = new Image();
+      img.src = appState.collapsedImage;
+
+      // Sequencer state
+      let idxR = 0, idxG = 0, idxB = 0;
+      let accR = 0, accG = 0, accB = 0;
+      const rgb = appState.matrixRGB;
+      const luma = appState.matrixLuma;
+
+      const getPixel = (idx: number) => {
+        const y = Math.floor(idx / 16);
+        const x = idx % 16;
+        return { r: rgb[y][x][0], g: rgb[y][x][1], b: rgb[y][x][2], l: luma[y][x] };
+      };
+
+      img.onload = () => {
+        const draw = () => {
+          if (audioCtxRef.current !== ctx) return; // Stale instance
+          animationRef.current = requestAnimationFrame(draw);
+          
+          // Audio logic
+          analyser.getByteTimeDomainData(dataArray);
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) {
+            const val = (dataArray[i] - 128) / 128;
+            sum += val * val;
+          }
+          const rms = Math.sqrt(sum / dataArray.length);
+          const cv = rms > 0.05 ? rms * 2 : 0;
+
+          // Update sequencers
+          accR += cv * 0.4 + 0.01;
+          accG += cv * 0.6 + 0.015;
+          accB += cv * 0.8 + 0.02;
+
+          if (accR >= 1) { accR -= 1; idxR = (idxR + 1) % 256; }
+          if (accG >= 1) { accG -= 1; idxG = (idxG + 1) % 256; }
+          if (accB >= 1) { accB -= 1; idxB = (idxB + 1) % 256; }
+
+          // Map synth parameters
+          const pxR = getPixel(idxR);
+          const pxG = getPixel(idxG);
+          const pxB = getPixel(idxB);
+
+          voiceR.carrier.frequency.setTargetAtTime(40 + pxR.r * 0.5, ctx.currentTime, 0.05);
+          voiceR.modulator.frequency.setTargetAtTime((40 + pxR.r * 0.5) * (pxR.g / 50 + 0.1), ctx.currentTime, 0.05);
+          voiceR.modGain.gain.setTargetAtTime(pxR.l * 5, ctx.currentTime, 0.05);
+          voiceR.vca.gain.setTargetAtTime(Math.min(cv, 1), ctx.currentTime, 0.02);
+
+          voiceG.carrier.frequency.setTargetAtTime(150 + pxG.g * 1.5, ctx.currentTime, 0.05);
+          voiceG.modulator.frequency.setTargetAtTime((150 + pxG.g * 1.5) * (pxG.b / 50 + 0.1), ctx.currentTime, 0.05);
+          voiceG.modGain.gain.setTargetAtTime(pxG.l * 10, ctx.currentTime, 0.05);
+          voiceG.vca.gain.setTargetAtTime(Math.min(cv * 0.8, 1), ctx.currentTime, 0.02);
+
+          voiceB.carrier.frequency.setTargetAtTime(600 + pxB.b * 4, ctx.currentTime, 0.05);
+          voiceB.modulator.frequency.setTargetAtTime((600 + pxB.b * 4) * (pxB.r / 50 + 0.1), ctx.currentTime, 0.05);
+          voiceB.modGain.gain.setTargetAtTime(pxB.l * 15, ctx.currentTime, 0.05);
+          voiceB.vca.gain.setTargetAtTime(Math.min(cv * 0.6, 1), ctx.currentTime, 0.02);
+
+          // Render
+          canvasCtx.globalCompositeOperation = 'source-over';
+          canvasCtx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+          const cellW = canvas.width / 16;
+          const cellH = canvas.height / 16;
+
+          const drawHighlight = (idx: number, color: string) => {
+            const x = (idx % 16) * cellW;
+            const y = Math.floor(idx / 16) * cellH;
+            
+            canvasCtx.globalCompositeOperation = 'hard-light';
+            canvasCtx.fillStyle = color;
+            canvasCtx.fillRect(x, y, cellW, cellH);
+            
+            canvasCtx.globalCompositeOperation = 'source-over';
+            canvasCtx.strokeStyle = color;
+            canvasCtx.lineWidth = 2;
+            canvasCtx.strokeRect(x, y, cellW, cellH);
+          };
+
+          drawHighlight(idxR, `rgba(255, 0, 0, ${cv + 0.2})`);
+          drawHighlight(idxG, `rgba(0, 255, 0, ${cv + 0.2})`);
+          drawHighlight(idxB, `rgba(0, 100, 255, ${cv + 0.2})`);
+        };
+        draw();
+      };
+
+    } catch (err) {
+      console.error("Audio playback error:", err);
+      setIsDecoding(false);
+      setIsPlaying(false);
     }
   };
 
+  // Draw the image immediately before play is pressed
   useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d');
-    
-    if (!canvas || !ctx || !appState.collapsedImage) return;
-
-    const img = new Image();
-    img.src = appState.collapsedImage;
-    
-    img.onload = () => {
-      const render = () => {
-        animationRef.current = requestAnimationFrame(render);
-        
-        // Base image
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-        if (isPlaying && audioBuffer && audioCtxRef.current && appState.synthEvents.length > 0) {
-          const duration = audioBuffer.duration;
-          // Calculate time modulo duration for loop
-          const elapsed = audioCtxRef.current.currentTime - startTimeRef.current;
-          const time = elapsed % duration;
-          
-          // Find the most recent event
-          let currentEvent = appState.synthEvents[0];
-          for (let i = appState.synthEvents.length - 1; i >= 0; i--) {
-            if (appState.synthEvents[i].time <= time) {
-              currentEvent = appState.synthEvents[i];
-              break;
-            }
-          }
-
-          if (currentEvent) {
-            const cellW = canvas.width / 16;
-            const cellH = canvas.height / 16;
-
-            const drawHighlight = (idx: number, color: string) => {
-              const x = (idx % 16) * cellW;
-              const y = Math.floor(idx / 16) * cellH;
-              
-              // Glitch effect: invert colors or add intense color overlay
-              ctx.globalCompositeOperation = 'hard-light';
-              ctx.fillStyle = color;
-              ctx.fillRect(x, y, cellW, cellH);
-              
-              // Add a border
-              ctx.globalCompositeOperation = 'source-over';
-              ctx.strokeStyle = color;
-              ctx.lineWidth = 2;
-              ctx.strokeRect(x, y, cellW, cellH);
-            };
-
-            drawHighlight(currentEvent.r, 'rgba(255, 0, 0, 0.7)');
-            drawHighlight(currentEvent.g, 'rgba(0, 255, 0, 0.7)');
-            drawHighlight(currentEvent.b, 'rgba(0, 100, 255, 0.7)');
-          }
-        }
-      };
-      
-      render();
-    };
-
-    return () => {
-      if (animationRef.current) cancelAnimationFrame(animationRef.current);
-    };
-  }, [appState.collapsedImage, appState.synthEvents, isPlaying, audioBuffer]);
+    if (!isPlaying && appState.collapsedImage && canvasRef.current) {
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        const img = new Image();
+        img.src = appState.collapsedImage;
+        img.onload = () => {
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        };
+      }
+    }
+  }, [isPlaying, appState.collapsedImage]);
 
   const handleSave = () => {
     alert('Subida a repositorio Firebase simulada. (Configura tus credenciales en Firebase para activarlo).');
@@ -164,7 +234,7 @@ export default function Station4Gallery({ appState }: Props) {
          <div className="flex w-full justify-center mt-6">
            <button 
              onClick={togglePlay}
-             disabled={isDecoding || !audioBuffer}
+             disabled={isDecoding || !appState.audioBlob}
              className="flex items-center space-x-3 px-12 py-4 bg-pure-black text-white hover:bg-gray-800 disabled:opacity-50 transition-colors uppercase tracking-widest font-bold shadow-[4px_4px_0px_0px_rgba(255,0,0,1)] active:translate-y-1 active:shadow-none"
            >
              {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6" />}

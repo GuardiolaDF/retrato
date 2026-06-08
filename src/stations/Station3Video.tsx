@@ -10,7 +10,7 @@ interface Props {
 
 export default function Station3Video({ onComplete, updateState }: Props) {
   const [step, setStep] = useState<'intro' | 'recording' | 'done'>('intro');
-  const [timeLeft, setTimeLeft] = useState(20);
+  const [timeLeft, setTimeLeft] = useState(16);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -32,7 +32,7 @@ export default function Station3Video({ onComplete, updateState }: Props) {
       accumulatorRef.current = new Float32Array(512 * 512 * 4);
       frameCountRef.current = 0;
 
-      let t = 20;
+      let t = 16;
       setTimeLeft(t);
       
       const captureInterval = setInterval(() => {
@@ -133,7 +133,7 @@ export default function Station3Video({ onComplete, updateState }: Props) {
             El Colapso
           </h1>
           <p className="text-xl max-w-2xl mx-auto leading-relaxed">
-            El tiempo transcurre en 20 segundos de movimiento. 
+            El tiempo transcurre en 16 segundos de movimiento. 
             Extraeremos cada estrato temporal y lo aplastaremos progresivamente en una única coordenada espacial,
             generando un fantasma matemático del tiempo.
           </p>
@@ -142,7 +142,7 @@ export default function Station3Video({ onComplete, updateState }: Props) {
             className="group flex items-center justify-center space-x-3 mx-auto px-8 py-4 border-2 border-pure-black hover:bg-pure-black hover:text-pure-white transition-all duration-300 uppercase tracking-widest font-bold"
           >
             <Video className="w-6 h-6" />
-            <span>Grabar Tiempo (20s)</span>
+            <span>Grabar Colapso (16s)</span>
           </button>
         </div>
       )}
