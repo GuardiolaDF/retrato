@@ -61,6 +61,14 @@ export default function Station4Gallery({ appState }: Props) {
         const modGain = ctx.createGain();
         const vca = ctx.createGain();
 
+        // Delay for overlapping chaotic sounds
+        const delay = ctx.createDelay(1.0);
+        delay.delayTime.value = 0.3; // 300ms delay
+        const feedback = ctx.createGain();
+        feedback.gain.value = 0.5; // 50% feedback
+        delay.connect(feedback);
+        feedback.connect(delay);
+
         carrier.type = 'sine';
         modulator.type = 'sine';
         
@@ -72,6 +80,10 @@ export default function Station4Gallery({ appState }: Props) {
         modGain.connect(carrier.frequency);
         carrier.connect(vca);
         vca.connect(masterGain);
+        
+        // Connect VCA to delay
+        vca.connect(delay);
+        delay.connect(masterGain);
 
         carrier.start();
         modulator.start();
@@ -97,8 +109,6 @@ export default function Station4Gallery({ appState }: Props) {
       img.src = appState.collapsedImage;
 
       // Sequencer state
-      let idxR = 0, idxG = 0, idxB = 0;
-      let accR = 0, accG = 0, accB = 0;
       const rgb = appState.matrixRGB;
       const luma = appState.matrixLuma;
 
@@ -108,11 +118,35 @@ export default function Station4Gallery({ appState }: Props) {
         return { r: rgb[y][x][0], g: rgb[y][x][1], b: rgb[y][x][2], l: luma[y][x] };
       };
 
+      // Create 3 independent paths sorted by color intensity to ensure all pixels are played in a chaotic but structured way
+      const indices = Array.from({length: 256}, (_, i) => i);
+      const pathR = [...indices].sort((a, b) => getPixel(a).r - getPixel(b).r);
+      const pathG = [...indices].sort((a, b) => getPixel(a).g - getPixel(b).g);
+      const pathB = [...indices].sort((a, b) => getPixel(a).b - getPixel(b).b);
+
+      const startTime = ctx.currentTime;
+      let didEnd = false;
+
       img.onload = () => {
         const draw = () => {
-          if (audioCtxRef.current !== ctx) return; // Stale instance
+          if (audioCtxRef.current !== ctx || didEnd) return; // Stale instance
           animationRef.current = requestAnimationFrame(draw);
           
+          const elapsed = ctx.currentTime - startTime;
+          const progress = elapsed / 16.0; // Fixed 16 seconds timeline
+
+          if (progress >= 1.0) {
+            didEnd = true;
+            source.stop();
+            setIsPlaying(false);
+            return;
+          }
+
+          const step = Math.floor(progress * 256);
+          const idxR = pathR[Math.min(step, 255)];
+          const idxG = pathG[Math.min(step, 255)];
+          const idxB = pathB[Math.min(step, 255)];
+
           // Audio logic
           analyser.getByteTimeDomainData(dataArray);
           let sum = 0;
@@ -121,16 +155,7 @@ export default function Station4Gallery({ appState }: Props) {
             sum += val * val;
           }
           const rms = Math.sqrt(sum / dataArray.length);
-          const cv = rms > 0.05 ? rms * 2 : 0;
-
-          // Update sequencers
-          accR += cv * 0.4 + 0.01;
-          accG += cv * 0.6 + 0.015;
-          accB += cv * 0.8 + 0.02;
-
-          if (accR >= 1) { accR -= 1; idxR = (idxR + 1) % 256; }
-          if (accG >= 1) { accG -= 1; idxG = (idxG + 1) % 256; }
-          if (accB >= 1) { accB -= 1; idxB = (idxB + 1) % 256; }
+          const cv = rms > 0.05 ? rms * 2 : 0.01;
 
           // Map synth parameters
           const pxR = getPixel(idxR);
@@ -140,17 +165,17 @@ export default function Station4Gallery({ appState }: Props) {
           voiceR.carrier.frequency.setTargetAtTime(40 + pxR.r * 0.5, ctx.currentTime, 0.05);
           voiceR.modulator.frequency.setTargetAtTime((40 + pxR.r * 0.5) * (pxR.g / 50 + 0.1), ctx.currentTime, 0.05);
           voiceR.modGain.gain.setTargetAtTime(pxR.l * 5, ctx.currentTime, 0.05);
-          voiceR.vca.gain.setTargetAtTime(Math.min(cv, 1), ctx.currentTime, 0.02);
+          voiceR.vca.gain.setTargetAtTime(Math.min(cv, 1), ctx.currentTime, 0.2); // Longer release
 
           voiceG.carrier.frequency.setTargetAtTime(150 + pxG.g * 1.5, ctx.currentTime, 0.05);
           voiceG.modulator.frequency.setTargetAtTime((150 + pxG.g * 1.5) * (pxG.b / 50 + 0.1), ctx.currentTime, 0.05);
           voiceG.modGain.gain.setTargetAtTime(pxG.l * 10, ctx.currentTime, 0.05);
-          voiceG.vca.gain.setTargetAtTime(Math.min(cv * 0.8, 1), ctx.currentTime, 0.02);
+          voiceG.vca.gain.setTargetAtTime(Math.min(cv * 0.8, 1), ctx.currentTime, 0.2); // Longer release
 
           voiceB.carrier.frequency.setTargetAtTime(600 + pxB.b * 4, ctx.currentTime, 0.05);
           voiceB.modulator.frequency.setTargetAtTime((600 + pxB.b * 4) * (pxB.r / 50 + 0.1), ctx.currentTime, 0.05);
           voiceB.modGain.gain.setTargetAtTime(pxB.l * 15, ctx.currentTime, 0.05);
-          voiceB.vca.gain.setTargetAtTime(Math.min(cv * 0.6, 1), ctx.currentTime, 0.02);
+          voiceB.vca.gain.setTargetAtTime(Math.min(cv * 0.6, 1), ctx.currentTime, 0.2); // Longer release
 
           // Render
           canvasCtx.globalCompositeOperation = 'source-over';
