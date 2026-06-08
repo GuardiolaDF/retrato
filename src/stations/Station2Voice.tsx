@@ -153,6 +153,8 @@ export default function Station2Voice({ onComplete, appState, updateState }: Pro
 
     const startTime = ctx.currentTime;
     let didEnd = false;
+    let lastStep = -1;
+    const particles: {x: number, y: number, color: string, life: number}[] = [];
 
     const draw = () => {
       if (!canvas || !canvasCtx || didEnd) return;
@@ -181,6 +183,14 @@ export default function Station2Voice({ onComplete, appState, updateState }: Pro
       const rms = Math.sqrt(sum / dataArray.length);
       const cv = rms > 0.05 ? rms * 2 : 0.01;
 
+      if (step !== lastStep) {
+        lastStep = step;
+        const initialLife = Math.min(cv + 0.3, 1.0); // Make sure it flashes even on quiet sounds
+        particles.push({x: idxR % 16, y: Math.floor(idxR / 16), color: '255, 0, 0', life: initialLife});
+        particles.push({x: idxG % 16, y: Math.floor(idxG / 16), color: '0, 255, 0', life: initialLife});
+        particles.push({x: idxB % 16, y: Math.floor(idxB / 16), color: '0, 0, 255', life: initialLife}); // Pure blue
+      }
+
       // Apply Matrix Data to Synths
       const pxR = getPixel(idxR);
       const pxG = getPixel(idxG);
@@ -204,21 +214,49 @@ export default function Station2Voice({ onComplete, appState, updateState }: Pro
       voiceB.modGain.gain.setTargetAtTime(pxB.l * 15, ctx.currentTime, 0.05);
       voiceB.vca.gain.setTargetAtTime(Math.min(cv * 0.6, 1), ctx.currentTime, 0.2); // Longer release
 
-      // Visual feedback
-      canvasCtx.fillStyle = '#111';
+      // Visual feedback: White background
+      canvasCtx.globalCompositeOperation = 'source-over';
+      canvasCtx.fillStyle = '#ffffff';
       canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
       
-      // Draw 3 Playheads in a pseudo grid
-      const drawPlayhead = (idx: number, color: string) => {
-        const x = (idx % 16) * (canvas.width / 16);
-        const y = Math.floor(idx / 16) * (canvas.height / 16);
-        canvasCtx.fillStyle = color;
-        canvasCtx.fillRect(x, y, canvas.width / 16, canvas.height / 16);
-      };
+      const cellW = canvas.width / 16;
+      const cellH = canvas.height / 16;
+      
+      // Draw 16x16 grid of dots
+      canvasCtx.fillStyle = '#999999';
+      for (let y = 0; y < 16; y++) {
+        for (let x = 0; x < 16; x++) {
+          canvasCtx.beginPath();
+          canvasCtx.arc((x + 0.5) * cellW, (y + 0.5) * cellH, 2, 0, Math.PI * 2);
+          canvasCtx.fill();
+        }
+      }
 
-      drawPlayhead(idxR, `rgba(255, 0, 0, ${cv + 0.2})`);
-      drawPlayhead(idxG, `rgba(0, 255, 0, ${cv + 0.2})`);
-      drawPlayhead(idxB, `rgba(0, 100, 255, ${cv + 0.2})`);
+      // Additive blending for circles (Screen mode creates CMY)
+      canvasCtx.globalCompositeOperation = 'screen';
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.life *= 0.90; // Decay matching the audio envelope
+        
+        if (p.life < 0.01) {
+          particles.splice(i, 1);
+          continue;
+        }
+
+        const cx = (p.x + 0.5) * cellW;
+        const cy = (p.y + 0.5) * cellH;
+        const radius = cellW * 2.5; // Diameter is larger to overlap
+
+        const grad = canvasCtx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+        grad.addColorStop(0, `rgba(${p.color}, ${p.life})`);
+        grad.addColorStop(1, `rgba(${p.color}, 0)`);
+
+        canvasCtx.fillStyle = grad;
+        canvasCtx.beginPath();
+        canvasCtx.arc(cx, cy, radius, 0, Math.PI * 2);
+        canvasCtx.fill();
+      }
+      canvasCtx.globalCompositeOperation = 'source-over';
     };
     draw();
 
