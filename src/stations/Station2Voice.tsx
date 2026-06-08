@@ -214,9 +214,9 @@ export default function Station2Voice({ onComplete, appState, updateState }: Pro
       voiceB.modGain.gain.setTargetAtTime(pxB.l * 15, ctx.currentTime, 0.05);
       voiceB.vca.gain.setTargetAtTime(Math.min(cv * 0.6, 1), ctx.currentTime, 0.2); // Longer release
 
-      // Visual feedback: White background
+      // Visual feedback: Black background for additive synthesis
       canvasCtx.globalCompositeOperation = 'source-over';
-      canvasCtx.fillStyle = '#ffffff';
+      canvasCtx.fillStyle = '#000000';
       canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
       
       const cellW = canvas.width / 16;
