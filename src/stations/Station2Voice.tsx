@@ -16,6 +16,7 @@ export default function Station2Voice({ onComplete, appState, updateState }: Pro
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const waveformRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number | null>(null);
 
   const startRecording = async () => {
@@ -84,9 +85,6 @@ export default function Station2Voice({ onComplete, appState, updateState }: Pro
     masterGain.gain.value = 1.0;
     masterGain.connect(ctx.destination);
 
-    // We no longer record the synth. Station 4 will generate it live from the voice blob.
-    // This avoids Safari MediaRecorder audio decoding bugs completely.
-
       // Helper to create an FM Voice
       const createFMVoice = (baseFreq: number) => {
         const carrier = ctx.createOscillator();
@@ -134,6 +132,10 @@ export default function Station2Voice({ onComplete, appState, updateState }: Pro
     const dataArray = new Uint8Array(analyser.frequencyBinCount);
     const canvas = canvasRef.current;
     const canvasCtx = canvas?.getContext('2d');
+    const waveCanvas = waveformRef.current;
+    const waveCtx = waveCanvas?.getContext('2d');
+
+    if (!canvas || !canvasCtx || !waveCanvas || !waveCtx) return;
 
     // Sequencer state
     const rgb = appState.matrixRGB;
@@ -157,7 +159,7 @@ export default function Station2Voice({ onComplete, appState, updateState }: Pro
     const particles: {x: number, y: number, color: string, life: number}[] = [];
 
     const draw = () => {
-      if (!canvas || !canvasCtx || didEnd) return;
+      if (!canvas || !canvasCtx || !waveCanvas || !waveCtx || didEnd) return;
       animationRef.current = requestAnimationFrame(draw);
       
       const elapsed = ctx.currentTime - startTime;
@@ -258,24 +260,27 @@ export default function Station2Voice({ onComplete, appState, updateState }: Pro
       }
       canvasCtx.globalCompositeOperation = 'source-over';
 
-      // Draw Waveform Overlay
-      canvasCtx.lineWidth = 2;
-      canvasCtx.strokeStyle = 'rgba(0, 255, 0, 0.8)';
-      canvasCtx.beginPath();
-      const sliceWidth = canvas.width / dataArray.length;
+      // Draw Waveform Overlay in separate canvas
+      waveCtx.fillStyle = '#000000';
+      waveCtx.fillRect(0, 0, waveCanvas.width, waveCanvas.height);
+      
+      waveCtx.lineWidth = 2;
+      waveCtx.strokeStyle = 'rgba(0, 255, 0, 0.8)';
+      waveCtx.beginPath();
+      const sliceWidth = waveCanvas.width / dataArray.length;
       let waveX = 0;
       for (let i = 0; i < dataArray.length; i++) {
         const v = dataArray[i] / 128.0;
-        const waveY = (v * canvas.height) / 2;
+        const waveY = (v * waveCanvas.height) / 2;
 
         if (i === 0) {
-          canvasCtx.moveTo(waveX, waveY);
+          waveCtx.moveTo(waveX, waveY);
         } else {
-          canvasCtx.lineTo(waveX, waveY);
+          waveCtx.lineTo(waveX, waveY);
         }
         waveX += sliceWidth;
       }
-      canvasCtx.stroke();
+      waveCtx.stroke();
     };
     draw();
 
@@ -335,16 +340,20 @@ export default function Station2Voice({ onComplete, appState, updateState }: Pro
 
       {(step === 'recorded' || step === 'playing') && (
         <div className="w-full flex flex-col items-center space-y-8 animate-fade-in">
-          <div className="border-4 border-pure-black p-4 w-full max-w-2xl bg-white relative">
-             <div className="absolute top-0 left-0 bg-pure-black text-pure-white text-xs px-2 py-1 uppercase font-bold tracking-widest">
-               Seguidor de Envolvente (Gate/CV)
-             </div>
+          <div className="w-full flex flex-col items-center border-4 border-pure-black p-4 bg-white">
+            <div className="w-full max-w-[512px] mb-4 border-2 border-pure-black bg-pure-black relative overflow-hidden">
+              <span className="absolute top-2 left-2 text-pure-red text-[10px] font-bold uppercase tracking-widest z-10 bg-pure-black/50 px-1">Frecuencia de Voz</span>
+              <canvas ref={waveformRef} width={512} height={80} className="w-full h-[80px] object-cover block" />
+            </div>
+            
+            <div className="relative w-full max-w-[512px]">
               <canvas 
                 ref={canvasRef} 
                 width={512} 
                 height={512} 
-                className="w-full max-w-[512px] aspect-square mt-6 bg-pure-black border border-gray-200 mx-auto block"
+                className="w-full aspect-square object-cover bg-black"
               />
+            </div>
              <div className="flex justify-center mt-6">
                <button 
                   onClick={playSonification}

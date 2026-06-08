@@ -150,10 +150,16 @@ export default function Station4Gallery({ appState }: Props) {
           const progress = elapsed / 16.0; // Fixed 16 seconds timeline
 
           if (progress >= 1.0) {
-            didEnd = true;
-            source.stop();
-            setIsPlaying(false);
-            return;
+            if (!didEnd) {
+              didEnd = true;
+              // Fade out audio over 2 seconds instead of hard stop
+              masterGain.gain.setTargetAtTime(0.001, ctx.currentTime, 0.5);
+              setTimeout(() => {
+                try { source.stop(); } catch(e){}
+                setIsPlaying(false);
+              }, 2000);
+            }
+            return; // Freeze visuals
           }
 
           const step = Math.floor(progress * 256);
@@ -228,18 +234,19 @@ export default function Station4Gallery({ appState }: Props) {
               activeCtx.globalAlpha = 0.5 * p.life; // Gradual intensity based on ADSR envelope
               
               if (p.color === '255, 0, 0') {
-                // Red: Bulge/Magnify
+                // Red: Licuar (Smudge/Shift)
+                activeCtx.translate(4 * p.life, 4 * p.life);
+              } else if (p.color === '0, 255, 0') {
+                // Green: Ojo de Pez (Bulge/Expand)
                 activeCtx.translate(cx, cy);
-                const scale = 1.0 + (0.02 * p.life);
+                const scale = 1.0 + (0.05 * p.life);
                 activeCtx.scale(scale, scale);
                 activeCtx.translate(-cx, -cy);
-              } else if (p.color === '0, 255, 0') {
-                // Green: Smudge/Shift
-                activeCtx.translate(3 * p.life, -3 * p.life);
               } else if (p.color === '0, 0, 255') {
-                // Blue: Twirl/Rotate
+                // Blue: Pellizcar (Pinch/Shrink)
                 activeCtx.translate(cx, cy);
-                activeCtx.rotate(0.05 * p.life);
+                const scale = 1.0 - (0.05 * p.life);
+                activeCtx.scale(scale, scale);
                 activeCtx.translate(-cx, -cy);
               }
 
