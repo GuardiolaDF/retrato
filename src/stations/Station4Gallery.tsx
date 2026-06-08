@@ -8,34 +8,67 @@ interface Props {
 
 export default function Station4Gallery({ appState }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
   const animationRef = useRef<number | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const sourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const startTimeRef = useRef<number>(0);
+  
   const [isPlaying, setIsPlaying] = useState(false);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [audioBuffer, setAudioBuffer] = useState<AudioBuffer | null>(null);
+  const [isDecoding, setIsDecoding] = useState(false);
 
   useEffect(() => {
     if (appState.synthAudioBlob) {
-      const url = URL.createObjectURL(appState.synthAudioBlob);
-      setAudioUrl(url);
-      return () => URL.revokeObjectURL(url);
+      setIsDecoding(true);
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      audioCtxRef.current = ctx;
+      
+      appState.synthAudioBlob.arrayBuffer().then(buffer => {
+        ctx.decodeAudioData(buffer, (decoded) => {
+          setAudioBuffer(decoded);
+          setIsDecoding(false);
+        }, (err) => {
+          console.error("Audio decode error:", err);
+          setIsDecoding(false);
+        });
+      });
+
+      return () => {
+        ctx.close();
+      };
     }
   }, [appState.synthAudioBlob]);
 
   const togglePlay = () => {
-    if (audioRef.current) {
-      if (isPlaying) {
-        audioRef.current.pause();
-      } else {
-        audioRef.current.play();
+    if (!audioBuffer || !audioCtxRef.current) return;
+    const ctx = audioCtxRef.current;
+    
+    if (isPlaying) {
+      if (sourceRef.current) {
+        sourceRef.current.stop();
+        sourceRef.current = null;
       }
-      setIsPlaying(!isPlaying);
+      setIsPlaying(false);
+    } else {
+      // AudioContext needs to be resumed on Safari
+      if (ctx.state === 'suspended') {
+        ctx.resume();
+      }
+      
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.loop = true;
+      source.connect(ctx.destination);
+      source.start();
+      sourceRef.current = source;
+      startTimeRef.current = ctx.currentTime;
+      setIsPlaying(true);
     }
   };
 
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
-    const audio = audioRef.current;
     
     if (!canvas || !ctx || !appState.collapsedImage) return;
 
@@ -49,8 +82,11 @@ export default function Station4Gallery({ appState }: Props) {
         // Base image
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-        if (isPlaying && audio && appState.synthEvents.length > 0) {
-          const time = audio.currentTime;
+        if (isPlaying && audioBuffer && audioCtxRef.current && appState.synthEvents.length > 0) {
+          const duration = audioBuffer.duration;
+          // Calculate time modulo duration for loop
+          const elapsed = audioCtxRef.current.currentTime - startTimeRef.current;
+          const time = elapsed % duration;
           
           // Find the most recent event
           let currentEvent = appState.synthEvents[0];
@@ -94,7 +130,7 @@ export default function Station4Gallery({ appState }: Props) {
     return () => {
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
     };
-  }, [appState.collapsedImage, appState.synthEvents, isPlaying]);
+  }, [appState.collapsedImage, appState.synthEvents, isPlaying, audioBuffer]);
 
   const handleSave = () => {
     alert('Subida a repositorio Firebase simulada. (Configura tus credenciales en Firebase para activarlo).');
@@ -124,25 +160,17 @@ export default function Station4Gallery({ appState }: Props) {
            height={512} 
            className="w-full max-w-[512px] aspect-square object-cover"
          />
-         
-         {audioUrl && (
-           <audio 
-             ref={audioRef} 
-             src={audioUrl} 
-             loop 
-             onPlay={() => setIsPlaying(true)}
-             onPause={() => setIsPlaying(false)}
-             className="hidden"
-           />
-         )}
 
          <div className="flex w-full justify-center mt-6">
            <button 
              onClick={togglePlay}
-             className="flex items-center space-x-3 px-12 py-4 bg-pure-black text-white hover:bg-gray-800 transition-colors uppercase tracking-widest font-bold shadow-[4px_4px_0px_0px_rgba(255,0,0,1)] active:translate-y-1 active:shadow-none"
+             disabled={isDecoding || !audioBuffer}
+             className="flex items-center space-x-3 px-12 py-4 bg-pure-black text-white hover:bg-gray-800 disabled:opacity-50 transition-colors uppercase tracking-widest font-bold shadow-[4px_4px_0px_0px_rgba(255,0,0,1)] active:translate-y-1 active:shadow-none"
            >
              {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6" />}
-             <span>{isPlaying ? 'Pausar Obra' : 'Reproducir Paisaje Sonoro'}</span>
+             <span>
+               {isDecoding ? 'Decodificando Audio...' : (isPlaying ? 'Pausar Obra' : 'Reproducir Paisaje Sonoro')}
+             </span>
            </button>
          </div>
       </div>

@@ -87,13 +87,15 @@ export default function Station2Voice({ onComplete, appState, updateState }: Pro
     // Prepare MediaRecorder to capture the synthesized output
     const destNode = ctx.createMediaStreamDestination();
     masterGain.connect(destNode);
+    // Do NOT specify type to allow Safari to use its native mp4 codec
     const synthRecorder = new MediaRecorder(destNode.stream);
     const synthChunks: Blob[] = [];
     synthRecorder.ondataavailable = e => { if (e.data.size > 0) synthChunks.push(e.data); };
     let finalEvents: {time: number, r: number, g: number, b: number}[] = [];
     
     synthRecorder.onstop = () => {
-      const synthAudioBlob = new Blob(synthChunks, { type: 'audio/webm' });
+      const type = synthChunks[0]?.type || '';
+      const synthAudioBlob = new Blob(synthChunks, { type });
       updateState({ synthAudioBlob, synthEvents: finalEvents });
     };
 
@@ -126,6 +128,7 @@ export default function Station2Voice({ onComplete, appState, updateState }: Pro
     const voiceG = createFMVoice(200); // Mid
     const voiceB = createFMVoice(800); // High
 
+    source.loop = true;
     source.start();
     synthRecorder.start();
 
@@ -136,6 +139,7 @@ export default function Station2Voice({ onComplete, appState, updateState }: Pro
     // Sequencer state
     let idxR = 0, idxG = 0, idxB = 0;
     let accR = 0, accG = 0, accB = 0;
+    let stepsR = 0, stepsG = 0, stepsB = 0;
     const rgb = appState.matrixRGB;
     const luma = appState.matrixLuma;
     const events: {time: number, r: number, g: number, b: number}[] = [];
@@ -165,12 +169,16 @@ export default function Station2Voice({ onComplete, appState, updateState }: Pro
       accB += cv * 0.8 + 0.02;
 
       let changed = false;
-      if (accR >= 1) { accR -= 1; idxR = (idxR + 1) % 256; changed = true; }
-      if (accG >= 1) { accG -= 1; idxG = (idxG + 1) % 256; changed = true; }
-      if (accB >= 1) { accB -= 1; idxB = (idxB + 1) % 256; changed = true; }
+      if (accR >= 1) { accR -= 1; idxR = (idxR + 1) % 256; stepsR++; changed = true; }
+      if (accG >= 1) { accG -= 1; idxG = (idxG + 1) % 256; stepsG++; changed = true; }
+      if (accB >= 1) { accB -= 1; idxB = (idxB + 1) % 256; stepsB++; changed = true; }
 
       if (changed) {
         events.push({ time: ctx.currentTime, r: idxR, g: idxG, b: idxB });
+      }
+
+      if (stepsR >= 256 && stepsG >= 256 && stepsB >= 256) {
+        source.stop(); // trigger onended
       }
 
       // Apply Matrix Data to Synths
@@ -276,12 +284,12 @@ export default function Station2Voice({ onComplete, appState, updateState }: Pro
              <div className="absolute top-0 left-0 bg-pure-black text-pure-white text-xs px-2 py-1 uppercase font-bold tracking-widest">
                Seguidor de Envolvente (Gate/CV)
              </div>
-             <canvas 
-               ref={canvasRef} 
-               width={600} 
-               height={200} 
-               className="w-full h-[200px] mt-6 bg-gray-50 border border-gray-200"
-             />
+              <canvas 
+                ref={canvasRef} 
+                width={512} 
+                height={512} 
+                className="w-full max-w-[512px] aspect-square mt-6 bg-pure-black border border-gray-200 mx-auto block"
+              />
              <div className="flex justify-center mt-6">
                <button 
                   onClick={playSonification}
