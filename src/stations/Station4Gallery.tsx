@@ -6,9 +6,10 @@ import { supabase } from '../lib/supabase';
 interface Props {
   appState: AppState;
   onShowGallery: () => void;
+  addLog: (log: string) => void;
 }
 
-export default function Station4Gallery({ appState, onShowGallery }: Props) {
+export default function Station4Gallery({ appState, onShowGallery, addLog }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -41,6 +42,7 @@ export default function Station4Gallery({ appState, onShowGallery }: Props) {
     if (!appState.audioBlob || !appState.matrixRGB.length || !appState.matrixLuma.length) return;
 
     setIsDecoding(true);
+    addLog("Inicializando síntesis aditiva...");
     try {
       const arrayBuffer = await appState.audioBlob.arrayBuffer();
       const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -103,6 +105,7 @@ export default function Station4Gallery({ appState, onShowGallery }: Props) {
       source.start();
       setIsDecoding(false);
       setIsPlaying(true);
+      addLog("Cabezales en movimiento caótico determinista. Imprimiendo canales RGB...");
 
       const dataArray = new Uint8Array(analyser.frequencyBinCount);
       const canvas = canvasRef.current;
@@ -143,15 +146,12 @@ export default function Station4Gallery({ appState, onShowGallery }: Props) {
       activeBuffer.width = 512;
       activeBuffer.height = 512;
       const activeCtx = activeBuffer.getContext('2d');
-
-      const tempBuffer = document.createElement('canvas');
-      tempBuffer.width = 512;
-      tempBuffer.height = 512;
-      const tempCtx = tempBuffer.getContext('2d');
+      if (activeCtx) {
+        activeCtx.fillStyle = '#000000';
+        activeCtx.fillRect(0, 0, 512, 512);
+      }
 
       img.onload = () => {
-        if (activeCtx) activeCtx.drawImage(img, 0, 0, 512, 512);
-
         const draw = () => {
           if (audioCtxRef.current !== ctx || didEnd) return; // Stale instance
           animationRef.current = requestAnimationFrame(draw);
@@ -218,14 +218,13 @@ export default function Station4Gallery({ appState, onShowGallery }: Props) {
           const cellW = canvas.width / 16;
           const cellH = canvas.height / 16;
 
-          // Process cumulative deformations
-          if (tempCtx && activeCtx) {
-            tempCtx.globalCompositeOperation = 'source-over';
-            tempCtx.drawImage(activeBuffer, 0, 0);
+          // Process cumulative RGB points
+          if (activeCtx) {
+            activeCtx.globalCompositeOperation = 'screen';
 
             for (let i = particles.length - 1; i >= 0; i--) {
               const p = particles[i];
-              p.life *= 0.97; // Slower decay
+              p.life *= 0.95; // Decay
               
               if (p.life < 0.01) {
                 particles.splice(i, 1);
@@ -234,34 +233,19 @@ export default function Station4Gallery({ appState, onShowGallery }: Props) {
 
               const cx = (p.x + 0.5) * cellW;
               const cy = (p.y + 0.5) * cellH;
-              const radius = cellW * 5.0; // Large area of effect
+              // Size expands based on amplitude
+              const radius = cellW * 4.0 * Math.max(p.life, 0.2); 
 
-              activeCtx.save();
               activeCtx.beginPath();
               activeCtx.arc(cx, cy, radius, 0, Math.PI * 2);
-              activeCtx.clip();
-
-              activeCtx.globalAlpha = 0.5 * p.life; // Gradual intensity based on ADSR envelope
               
-              if (p.color === '255, 0, 0') {
-                // Red: Licuar (Smudge/Shift)
-                activeCtx.translate(2 * p.life, 2 * p.life); // Was 4
-              } else if (p.color === '0, 255, 0') {
-                // Green: Ojo de Pez (Bulge/Expand)
-                activeCtx.translate(cx, cy);
-                const scale = 1.0 + (0.025 * p.life); // Was 0.05
-                activeCtx.scale(scale, scale);
-                activeCtx.translate(-cx, -cy);
-              } else if (p.color === '0, 0, 255') {
-                // Blue: Pellizcar (Pinch/Shrink)
-                activeCtx.translate(cx, cy);
-                const scale = 1.0 - (0.025 * p.life); // Was 0.05
-                activeCtx.scale(scale, scale);
-                activeCtx.translate(-cx, -cy);
-              }
-
-              activeCtx.drawImage(tempBuffer, 0, 0);
-              activeCtx.restore();
+              // Draw pure RGB soft circles
+              const grad = activeCtx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+              grad.addColorStop(0, `rgba(${p.color}, ${p.life * 0.8})`);
+              grad.addColorStop(1, `rgba(${p.color}, 0)`);
+              
+              activeCtx.fillStyle = grad;
+              activeCtx.fill();
             }
           }
 
@@ -356,50 +340,50 @@ export default function Station4Gallery({ appState, onShowGallery }: Props) {
   return (
     <div className="flex flex-col items-center w-full max-w-4xl animate-fade-in space-y-12 pb-20">
       
-      <div className="text-center space-y-4">
-        <h1 className="text-4xl md:text-5xl font-bold uppercase tracking-[0.2em] border-b-4 border-pure-black pb-4">
-          Exposición Viva
+      <div className="text-center space-y-4 p-8 brutal-panel w-full">
+        <h1 className="text-4xl md:text-5xl font-bold uppercase tracking-[0.2em] border-b-4 border-[var(--color-pure-red)] pb-4 text-glow-red">
+          EXPOSICIÓN VIVA
         </h1>
-        <p className="text-gray-600 max-w-2xl mx-auto uppercase tracking-widest text-xs">
-          La imagen espectral (tiempo colapsado) reacciona al paisaje sonoro. Los 3 cabezales secuenciadores 
-          hackean fragmentos espaciales al ritmo de tu voz.
+        <p className="text-gray-400 max-w-2xl mx-auto uppercase tracking-widest text-xs mt-4">
+          La imagen espectral reacciona al paisaje sonoro mediante síntesis aditiva. Los canales RGB imprimen
+          fotones simulados sobre el vacío negro.
         </p>
       </div>
 
-      <div className="w-full flex flex-col items-center border-4 border-pure-black p-4 bg-white">
+      <div className="w-full flex flex-col items-center brutal-panel p-4">
          <canvas 
            ref={canvasRef} 
            width={512} 
            height={512} 
-           className="w-full max-w-[512px] aspect-square object-cover"
+           className="w-full max-w-[512px] aspect-square object-cover bg-[var(--color-pure-black)]"
          />
 
          <div className="flex w-full justify-center mt-6">
            <button 
              onClick={togglePlay}
              disabled={isDecoding || !appState.audioBlob}
-             className="flex items-center space-x-3 px-12 py-4 bg-pure-black text-white hover:bg-gray-800 disabled:opacity-50 transition-colors uppercase tracking-widest font-bold shadow-[4px_4px_0px_0px_rgba(255,0,0,1)] active:translate-y-1 active:shadow-none"
+             className="flex items-center space-x-3 px-12 py-4 bg-[var(--color-brutal-bg)] text-white hover:bg-[var(--color-pure-red)] disabled:opacity-50 transition-colors uppercase tracking-widest font-bold border-2 border-[var(--color-pure-red)] brutal-border"
            >
              {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6" />}
              <span>
-               {isDecoding ? 'Decodificando Audio...' : (isPlaying ? 'Pausar Obra' : 'Reproducir Paisaje Sonoro')}
+               {isDecoding ? '[ DECODIFICANDO ]' : (isPlaying ? '[ PAUSAR_OBRA ]' : '[ INICIAR_SÍNTESIS ]')}
              </span>
            </button>
          </div>
       </div>
 
       {/* Artist name input */}
-      <div className="w-full max-w-md space-y-2">
-        <label htmlFor="artist-name" className="block text-xs uppercase tracking-widest font-bold text-gray-600">
-          Tu Nombre (firma de la obra)
+      <div className="w-full max-w-md space-y-2 brutal-panel p-4">
+        <label htmlFor="artist-name" className="block text-xs uppercase tracking-widest font-bold text-gray-400">
+          FIRMA_AUTOR(A)
         </label>
         <input
           id="artist-name"
           type="text"
           value={artistName}
           onChange={(e) => setArtistName(e.target.value)}
-          placeholder="Escribí tu nombre aquí..."
-          className="w-full px-4 py-3 border-2 border-pure-black font-mono text-sm focus:outline-none focus:ring-2 focus:ring-pure-red focus:border-pure-red transition-colors placeholder:text-gray-400"
+          placeholder="[ INGRESAR_NOMBRE ]"
+          className="w-full px-4 py-3 bg-transparent border-2 border-[var(--color-brutal-border)] font-mono text-sm focus:outline-none focus:border-[var(--color-pure-red)] transition-colors placeholder:text-gray-600 text-white"
         />
       </div>
 
@@ -407,22 +391,22 @@ export default function Station4Gallery({ appState, onShowGallery }: Props) {
           <button 
             onClick={handleSave}
             disabled={isUploading || isPlaying}
-            className="flex items-center space-x-2 px-6 py-3 border-2 border-pure-black hover:bg-pure-black hover:text-white disabled:opacity-50 transition-colors uppercase tracking-widest text-sm font-bold"
+            className="flex items-center space-x-2 px-6 py-3 bg-transparent border-2 border-white hover:bg-white hover:text-[var(--color-brutal-bg)] disabled:opacity-50 transition-colors uppercase tracking-widest text-sm font-bold"
           >
             {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UploadCloud className="w-4 h-4" />}
-            <span>{isUploading ? 'Subiendo...' : (uploadSuccess ? '✓ Subido' : 'Subir a Galería')}</span>
+            <span>{isUploading ? '[ SUBIENDO ]' : (uploadSuccess ? '[ COMPLETADO ]' : '[ GUARDAR_EN_NÚCLEO ]')}</span>
           </button>
           <button 
             onClick={onShowGallery}
-            className="flex items-center space-x-2 px-6 py-3 border-2 border-pure-black hover:bg-pure-black hover:text-white transition-colors uppercase tracking-widest text-sm font-bold"
+            className="flex items-center space-x-2 px-6 py-3 bg-transparent border-2 border-white hover:bg-white hover:text-[var(--color-brutal-bg)] transition-colors uppercase tracking-widest text-sm font-bold"
           >
-            <ImageIcon className="w-4 h-4" /> <span>Ver Galería</span>
+            <ImageIcon className="w-4 h-4" /> <span>[ VER_GALERÍA ]</span>
           </button>
           <button 
             onClick={handleRestart}
-            className="flex items-center space-x-2 px-6 py-3 border-2 border-pure-red text-pure-red hover:bg-pure-red hover:text-white transition-colors uppercase tracking-widest text-sm font-bold"
+            className="flex items-center space-x-2 px-6 py-3 border-2 border-[var(--color-pure-red)] text-[var(--color-pure-red)] hover:bg-[var(--color-pure-red)] hover:text-white transition-colors uppercase tracking-widest text-sm font-bold"
           >
-            <RefreshCw className="w-4 h-4" /> <span>Reiniciar</span>
+            <RefreshCw className="w-4 h-4" /> <span>[ REINICIAR_SISTEMA ]</span>
           </button>
       </div>
     </div>

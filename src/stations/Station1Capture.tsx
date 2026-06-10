@@ -6,9 +6,10 @@ interface Props {
   onComplete: () => void;
   appState: AppState;
   updateState: (updates: Partial<AppState>) => void;
+  addLog: (log: string) => void;
 }
 
-export default function Station1Capture({ onComplete, updateState }: Props) {
+export default function Station1Capture({ onComplete, updateState, addLog }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
@@ -20,6 +21,7 @@ export default function Station1Capture({ onComplete, updateState }: Props) {
   });
 
   const startCamera = async () => {
+    addLog("Iniciando sensor óptico...");
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({ 
         video: { facingMode: 'user', width: { ideal: 512 }, height: { ideal: 512 } }, 
@@ -27,6 +29,7 @@ export default function Station1Capture({ onComplete, updateState }: Props) {
       });
       setStream(mediaStream);
       setStep('camera');
+      addLog("Sensor óptico activo. Esperando captura de fotones...");
     } catch (err) {
       console.error("Error accessing camera:", err);
       alert("Se requiere acceso a la cámara para esta obra.");
@@ -67,6 +70,7 @@ export default function Station1Capture({ onComplete, updateState }: Props) {
     }
     
     setStep('collapsing');
+    addLog("Captura completada. Iniciando submuestreo de luminancia y croma...");
     
     // Save original image to state and create an Image object for safe downsampling
     const originalDataUrl = canvasRef.current.toDataURL('image/jpeg');
@@ -82,6 +86,7 @@ export default function Station1Capture({ onComplete, updateState }: Props) {
       if (i < resolutions.length) {
         const currentRes = resolutions[i];
         setResolution(currentRes);
+        addLog(`Colapsando matriz dimensional a: ${currentRes}x${currentRes}`);
         
         // Downsample technique
         const tempCanvas = document.createElement('canvas');
@@ -151,6 +156,7 @@ export default function Station1Capture({ onComplete, updateState }: Props) {
     setMatrices({ hex: hexMatrix, luma: lumaMatrix, rgb: rgbMatrix });
     updateState({ matrixLuma: lumaMatrix, matrixRGB: rgbMatrix });
     setStep('data');
+    addLog("Extracción de datos completada. Matrices HEX, LUMA y RGB generadas.");
   };
 
   const downloadCSV = (type: 'hex' | 'luma') => {
@@ -173,33 +179,33 @@ export default function Station1Capture({ onComplete, updateState }: Props) {
   return (
     <div className="flex flex-col items-center max-w-4xl w-full">
       {step === 'intro' && (
-        <div className="text-center space-y-8 animate-fade-in">
-          <h1 className="text-4xl md:text-6xl font-bold uppercase tracking-[0.2em] text-pure-red">
-            Discretización
+        <div className="text-center space-y-8 animate-fade-in p-8 brutal-panel max-w-2xl">
+          <h1 className="text-4xl md:text-6xl font-bold uppercase tracking-[0.2em] text-[var(--color-pure-red)] text-glow-red">
+            DISCRETIZACIÓN
           </h1>
-          <p className="text-xl max-w-2xl mx-auto leading-relaxed">
+          <p className="text-sm max-w-xl mx-auto leading-relaxed text-gray-400">
             La identidad humana colapsa en la grilla tecnológica. La luz y el color no son más que 
             una asignación numérica dentro de una matriz geométrica.
           </p>
           <button 
             onClick={startCamera}
-            className="group flex items-center justify-center space-x-3 mx-auto px-8 py-4 border-2 border-pure-black hover:bg-pure-black hover:text-pure-white transition-all duration-300 uppercase tracking-widest font-bold"
+            className="group flex items-center justify-center space-x-3 mx-auto px-8 py-4 bg-[var(--color-brutal-bg)] border-2 border-[var(--color-pure-red)] text-[var(--color-pure-red)] hover:bg-[var(--color-pure-red)] hover:text-white transition-all duration-300 uppercase tracking-widest font-bold brutal-border"
           >
             <Camera className="w-6 h-6" />
-            <span>Iniciar Extracción</span>
+            <span>[ INICIAR_EXTRACCIÓN ]</span>
           </button>
         </div>
       )}
 
       {(step === 'camera' || step === 'collapsing' || step === 'data') && (
-        <div className="w-full flex flex-col md:flex-row gap-8 items-start justify-center">
-          <div className="relative border-4 border-pure-black p-2 bg-white flex-shrink-0">
+        <div className="w-full flex flex-col items-center justify-center">
+          <div className="relative brutal-panel p-2 flex-shrink-0">
             <video 
               ref={videoRef} 
               autoPlay 
               playsInline 
               muted 
-              className={`w-[300px] h-[300px] md:w-[400px] md:h-[400px] object-cover ${step !== 'camera' ? 'hidden' : ''}`}
+              className={`w-[300px] h-[300px] md:w-[400px] md:h-[400px] object-cover grayscale opacity-80 mix-blend-screen ${step !== 'camera' ? 'hidden' : ''}`}
             />
             <canvas 
               ref={canvasRef} 
@@ -207,45 +213,45 @@ export default function Station1Capture({ onComplete, updateState }: Props) {
               style={{ imageRendering: 'pixelated', WebkitImageRendering: 'crisp-edges' } as any}
             />
             {step === 'collapsing' && (
-              <div className="absolute top-4 left-4 bg-pure-red text-white px-2 py-1 text-xs font-bold uppercase animate-pulse">
-                Colapsando: {resolution}x{resolution}
+              <div className="absolute top-4 left-4 bg-[var(--color-pure-red)] text-white px-2 py-1 text-xs font-bold uppercase animate-pulse brutal-border">
+                [ COLAPSANDO: {resolution}x{resolution} ]
               </div>
             )}
             {step === 'camera' && (
               <button 
                 onClick={captureAndCollapse}
-                className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-pure-red hover:bg-red-700 text-white px-6 py-2 uppercase tracking-widest font-bold border-2 border-pure-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-transform active:translate-y-1 active:shadow-none"
+                className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-[var(--color-brutal-bg)] hover:bg-[var(--color-pure-red)] text-[var(--color-pure-red)] hover:text-white px-6 py-2 uppercase tracking-widest font-bold border-2 border-[var(--color-pure-red)] transition-all brutal-border"
               >
-                Capturar
+                [ CAPTURAR_FOTONES ]
               </button>
             )}
           </div>
 
           {step === 'data' && (
-            <div className="flex flex-col space-y-6 w-full animate-fade-in text-sm">
-              <div className="border border-pure-black p-4 bg-gray-50">
-                <h3 className="font-bold uppercase tracking-widest mb-2 flex items-center text-pure-blue">
-                  <span className="w-3 h-3 bg-pure-blue inline-block mr-2"></span>
-                  Matriz Numérica 16x16
+            <div className="flex flex-col space-y-6 w-full max-w-md mt-8 animate-fade-in text-sm">
+              <div className="brutal-panel p-4">
+                <h3 className="font-bold uppercase tracking-widest mb-2 flex items-center text-[var(--color-pure-blue)] text-glow-blue">
+                  <span className="w-3 h-3 bg-[var(--color-pure-blue)] inline-block mr-2"></span>
+                  MATRIZ NUMÉRICA 16x16
                 </h3>
-                <p className="text-gray-600 mb-4 text-xs">
-                  La topología bidimensional ha sido preservada. Cada celda corresponde a la luminosidad exacta de la captura.
+                <p className="text-gray-400 mb-4 text-xs">
+                  Topología bidimensional preservada. Celdas codificadas por luminosidad.
                 </p>
                 <div className="flex gap-4">
-                  <button onClick={() => downloadCSV('hex')} className="flex items-center space-x-2 text-pure-black hover:text-pure-blue transition-colors border border-pure-black px-3 py-2 text-xs">
-                    <Download className="w-4 h-4" /> <span>HEX CSV</span>
+                  <button onClick={() => downloadCSV('hex')} className="flex items-center space-x-2 text-gray-300 hover:text-[var(--color-pure-blue)] transition-colors border border-[var(--color-pure-blue)] px-3 py-2 text-xs bg-[var(--color-brutal-bg)]">
+                    <Download className="w-4 h-4" /> <span>HEX.csv</span>
                   </button>
-                  <button onClick={() => downloadCSV('luma')} className="flex items-center space-x-2 text-pure-black hover:text-pure-blue transition-colors border border-pure-black px-3 py-2 text-xs">
-                    <Download className="w-4 h-4" /> <span>LUMA CSV</span>
+                  <button onClick={() => downloadCSV('luma')} className="flex items-center space-x-2 text-gray-300 hover:text-[var(--color-pure-green)] transition-colors border border-[var(--color-pure-green)] px-3 py-2 text-xs bg-[var(--color-brutal-bg)]">
+                    <Download className="w-4 h-4" /> <span>LUMA.csv</span>
                   </button>
                 </div>
               </div>
               
               <button 
                 onClick={onComplete}
-                className="w-full flex items-center justify-between px-6 py-4 bg-pure-black text-pure-white hover:bg-gray-800 transition-colors uppercase tracking-widest font-bold"
+                className="w-full flex items-center justify-between px-6 py-4 border-2 border-white hover:bg-white hover:text-[var(--color-pure-black)] transition-colors uppercase tracking-widest font-bold"
               >
-                <span>Avanzar al Interfaz Sonoro</span>
+                <span>[ INIT_INTERFAZ_SONORA ]</span>
                 <ChevronRight className="w-5 h-5" />
               </button>
             </div>

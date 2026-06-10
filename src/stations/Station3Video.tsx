@@ -6,9 +6,10 @@ interface Props {
   onComplete: () => void;
   appState: AppState;
   updateState: (updates: Partial<AppState>) => void;
+  addLog: (log: string) => void;
 }
 
-export default function Station3Video({ onComplete, updateState }: Props) {
+export default function Station3Video({ onComplete, updateState, addLog }: Props) {
   const [step, setStep] = useState<'intro' | 'recording' | 'done'>('intro');
   const [timeLeft, setTimeLeft] = useState(16);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -27,6 +28,7 @@ export default function Station3Video({ onComplete, updateState }: Props) {
       });
       streamRef.current = stream;
       setStep('recording');
+      addLog("Iniciando colapso temporal... Comprimiendo frames espaciales.");
       
       // Initialize accumulator
       accumulatorRef.current = new Float32Array(512 * 512 * 4);
@@ -123,26 +125,27 @@ export default function Station3Video({ onComplete, updateState }: Props) {
       updateState({ collapsedImage: dataUrl });
     }
     setStep('done');
+    addLog("Colapso temporal completado. Obteniendo fantasma matemático.");
   };
 
   return (
     <div className="flex flex-col items-center max-w-4xl w-full">
       {step === 'intro' && (
-        <div className="text-center space-y-8 animate-fade-in">
-          <h1 className="text-4xl md:text-6xl font-bold uppercase tracking-[0.2em] text-pure-blue">
-            El Colapso
+        <div className="text-center space-y-8 animate-fade-in p-8 brutal-panel max-w-2xl">
+          <h1 className="text-4xl md:text-6xl font-bold uppercase tracking-[0.2em] text-[var(--color-pure-blue)] text-glow-blue">
+            EL COLAPSO
           </h1>
-          <p className="text-xl max-w-2xl mx-auto leading-relaxed">
+          <p className="text-sm max-w-xl mx-auto leading-relaxed text-gray-400">
             El tiempo transcurre en 16 segundos de movimiento. 
             Extraeremos cada estrato temporal y lo aplastaremos progresivamente en una única coordenada espacial,
             generando un fantasma matemático del tiempo.
           </p>
           <button 
             onClick={startRecording}
-            className="group flex items-center justify-center space-x-3 mx-auto px-8 py-4 border-2 border-pure-black hover:bg-pure-black hover:text-pure-white transition-all duration-300 uppercase tracking-widest font-bold"
+            className="group flex items-center justify-center space-x-3 mx-auto px-8 py-4 bg-[var(--color-brutal-bg)] border-2 border-[var(--color-pure-blue)] text-[var(--color-pure-blue)] hover:bg-[var(--color-pure-blue)] hover:text-white transition-all duration-300 uppercase tracking-widest font-bold brutal-border"
           >
             <Video className="w-6 h-6" />
-            <span>Grabar Colapso (16s)</span>
+            <span>[ GRABAR_COLAPSO: 16s ]</span>
           </button>
         </div>
       )}
@@ -151,30 +154,30 @@ export default function Station3Video({ onComplete, updateState }: Props) {
         <div className="w-full flex flex-col md:flex-row gap-8 items-center justify-center animate-fade-in space-y-6 md:space-y-0">
           
           {step === 'recording' && (
-            <div className="relative border-4 border-pure-black p-2 bg-white flex flex-col items-center">
-              <span className="uppercase tracking-widest text-xs font-bold mb-2 text-pure-red">Tiempo Real</span>
+            <div className="relative brutal-panel p-2 flex flex-col items-center">
+              <span className="uppercase tracking-widest text-xs font-bold mb-2 text-[var(--color-pure-red)]">[ TIEMPO_REAL ]</span>
               <video 
                 ref={videoRef} 
                 autoPlay 
                 playsInline 
                 muted 
-                className="w-[200px] h-[200px] md:w-[300px] md:h-[300px] object-cover"
+                className="w-[200px] h-[200px] md:w-[300px] md:h-[300px] object-cover grayscale mix-blend-screen opacity-80"
               />
-              <div className="absolute bottom-4 right-4 bg-pure-blue text-white px-3 py-1 font-bold text-xl shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+              <div className="absolute bottom-4 right-4 bg-[var(--color-pure-blue)] text-white px-3 py-1 font-bold text-xl brutal-border text-glow-blue">
                 00:{timeLeft.toString().padStart(2, '0')}
               </div>
             </div>
           )}
 
-          <div className="relative border-4 border-pure-blue p-2 bg-white flex flex-col items-center">
-             <span className="uppercase tracking-widest text-xs font-bold mb-2 text-pure-blue">
-               {step === 'done' ? 'Colapso Finalizado' : 'Colapso Progresivo'}
+          <div className="relative border-4 border-[var(--color-pure-blue)] bg-[var(--color-brutal-bg)] p-2 flex flex-col items-center brutal-border shadow-[0_0_15px_rgba(0,0,255,0.3)]">
+             <span className="uppercase tracking-widest text-xs font-bold mb-2 text-[var(--color-pure-blue)]">
+               {step === 'done' ? '[ COLAPSO_FINALIZADO ]' : '[ COLAPSO_PROGRESIVO ]'}
              </span>
              <canvas 
               ref={canvasRef} 
               width={512} 
               height={512} 
-              className={`w-[300px] h-[300px] md:w-[400px] md:h-[400px] object-cover ${step === 'recording' ? 'animate-pulse' : ''}`}
+              className={`w-[300px] h-[300px] md:w-[400px] md:h-[400px] object-cover mix-blend-screen opacity-90 ${step === 'recording' ? 'animate-pulse' : ''}`}
             />
           </div>
 
@@ -183,14 +186,14 @@ export default function Station3Video({ onComplete, updateState }: Props) {
 
       {step === 'done' && (
         <div className="w-full max-w-2xl text-center mt-12 space-y-6 animate-fade-in">
-          <p className="text-gray-600">
-            20 segundos colapsados en una sola imagen estática.
+          <p className="text-gray-400 text-sm">
+            16 segundos colapsados en una sola imagen estática.
           </p>
           <button 
             onClick={onComplete}
-            className="w-full flex items-center justify-between px-6 py-4 bg-pure-black text-pure-white hover:bg-gray-800 transition-colors uppercase tracking-widest font-bold shadow-[4px_4px_0px_0px_rgba(0,0,255,1)] active:translate-y-1 active:shadow-none"
+            className="w-full flex items-center justify-between px-6 py-4 border-2 border-[var(--color-pure-blue)] hover:bg-[var(--color-pure-blue)] hover:text-white text-[var(--color-pure-blue)] transition-colors uppercase tracking-widest font-bold"
           >
-            <span>Ver Exposición Final</span>
+            <span>[ INIT_SÍNTESIS_ADITIVA ]</span>
             <ChevronRight className="w-5 h-5" />
           </button>
         </div>

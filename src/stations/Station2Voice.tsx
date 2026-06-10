@@ -6,9 +6,10 @@ interface Props {
   onComplete: () => void;
   appState: AppState;
   updateState: (updates: Partial<AppState>) => void;
+  addLog: (log: string) => void;
 }
 
-export default function Station2Voice({ onComplete, appState, updateState }: Props) {
+export default function Station2Voice({ onComplete, appState, updateState, addLog }: Props) {
   const [step, setStep] = useState<'intro' | 'recording' | 'recorded' | 'playing'>('intro');
   const [timeLeft, setTimeLeft] = useState(16);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -20,6 +21,7 @@ export default function Station2Voice({ onComplete, appState, updateState }: Pro
   const animationRef = useRef<number | null>(null);
 
   const startRecording = async () => {
+    addLog("Inicializando interfaz acústica...");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream);
@@ -39,6 +41,7 @@ export default function Station2Voice({ onComplete, appState, updateState }: Pro
 
       mediaRecorder.start();
       setStep('recording');
+      addLog("Grabando paisaje sonoro... Analizando envolvente de amplitud.");
       
       // Timer
       let t = 16;
@@ -67,6 +70,7 @@ export default function Station2Voice({ onComplete, appState, updateState }: Pro
   const playSonification = async () => {
     if (!appState.audioBlob || !appState.matrixLuma.length || !appState.matrixRGB.length) return;
     
+    addLog("Vinculando frecuencias a cabezales de color RGB...");
     setStep('playing');
     const arrayBuffer = await appState.audioBlob.arrayBuffer();
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -310,48 +314,48 @@ export default function Station2Voice({ onComplete, appState, updateState }: Pro
   return (
     <div className="flex flex-col items-center max-w-4xl w-full">
       {step === 'intro' && (
-        <div className="text-center space-y-8 animate-fade-in">
-          <h1 className="text-4xl md:text-6xl font-bold uppercase tracking-[0.2em] text-pure-green">
-            El Interruptor
+        <div className="text-center space-y-8 animate-fade-in p-8 brutal-panel max-w-2xl">
+          <h1 className="text-4xl md:text-6xl font-bold uppercase tracking-[0.2em] text-[var(--color-pure-green)] text-glow-green">
+            EL INTERRUPTOR
           </h1>
-          <p className="text-xl max-w-2xl mx-auto leading-relaxed">
+          <p className="text-sm max-w-xl mx-auto leading-relaxed text-gray-400">
             La voz humana pierde su significado lingüístico y se convierte en pura energía eléctrica.
-            Un voltaje de control (CV) que activará la matriz fotográfica, traduciendo el espacio al sonido.
+            Un voltaje de control (CV) que activará la matriz fotográfica.
           </p>
           <button 
             onClick={startRecording}
-            className="group flex items-center justify-center space-x-3 mx-auto px-8 py-4 border-2 border-pure-black hover:bg-pure-black hover:text-pure-white transition-all duration-300 uppercase tracking-widest font-bold"
+            className="group flex items-center justify-center space-x-3 mx-auto px-8 py-4 bg-[var(--color-brutal-bg)] border-2 border-[var(--color-pure-green)] text-[var(--color-pure-green)] hover:bg-[var(--color-pure-green)] hover:text-white transition-all duration-300 uppercase tracking-widest font-bold brutal-border"
           >
             <Mic className="w-6 h-6" />
-            <span>Grabar Voz (16s)</span>
+            <span>[ GRABAR_AUDIO: 16s ]</span>
           </button>
         </div>
       )}
 
       {step === 'recording' && (
-        <div className="text-center animate-fade-in space-y-6">
-          <div className="w-32 h-32 rounded-full border-4 border-pure-green flex items-center justify-center mx-auto animate-pulse">
-            <span className="text-4xl font-bold text-pure-green">{timeLeft}</span>
+        <div className="text-center animate-fade-in space-y-6 brutal-panel p-8">
+          <div className="w-32 h-32 rounded-none border-4 border-[var(--color-pure-green)] flex items-center justify-center mx-auto animate-pulse">
+            <span className="text-4xl font-bold text-[var(--color-pure-green)] text-glow-green">{timeLeft}</span>
           </div>
-          <p className="uppercase tracking-widest font-bold text-pure-black">Extrayendo energía...</p>
+          <p className="uppercase tracking-widest font-bold text-[var(--color-pure-green)]">[ EXTRACCIÓN_ACTIVA ]</p>
           <button 
             onClick={stopRecording}
-            className="flex items-center space-x-2 mx-auto text-pure-red hover:underline"
+            className="flex items-center space-x-2 mx-auto text-white hover:text-[var(--color-pure-red)] hover:underline transition-colors"
           >
-            <Square className="w-4 h-4" /> <span>Detener Antes</span>
+            <Square className="w-4 h-4" /> <span>Abortar Secuencia</span>
           </button>
         </div>
       )}
 
       {(step === 'recorded' || step === 'playing') && (
         <div className="w-full flex flex-col items-center space-y-8 animate-fade-in">
-          <div className="w-full flex flex-col items-center border-4 border-pure-black p-4 bg-white">
-            <div className="w-full max-w-[512px] mb-4 border-2 border-pure-black bg-pure-black relative overflow-hidden">
-              <span className="absolute top-2 left-2 text-pure-red text-[10px] font-bold uppercase tracking-widest z-10 bg-pure-black/50 px-1">Frecuencia de Voz</span>
+          <div className="w-full flex flex-col items-center brutal-panel p-4">
+            <div className="w-full max-w-[512px] mb-4 brutal-border bg-[var(--color-brutal-bg)] relative overflow-hidden">
+              <span className="absolute top-2 left-2 text-[var(--color-pure-green)] text-[10px] font-bold uppercase tracking-widest z-10 bg-[var(--color-brutal-bg)]/80 px-1 brutal-border">Análisis de Fourier / Frecuencia vocal</span>
               <canvas ref={waveformRef} width={512} height={80} className="w-full h-[80px] object-cover block" />
             </div>
             
-            <div className="relative w-full max-w-[512px]">
+            <div className="relative w-full max-w-[512px] brutal-border">
               <canvas 
                 ref={canvasRef} 
                 width={512} 
@@ -363,19 +367,19 @@ export default function Station2Voice({ onComplete, appState, updateState }: Pro
                <button 
                   onClick={playSonification}
                   disabled={step === 'playing'}
-                  className="flex items-center space-x-3 px-8 py-3 bg-pure-green text-pure-black hover:bg-green-400 disabled:opacity-50 transition-colors uppercase tracking-widest font-bold border-2 border-pure-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none"
+                  className="flex items-center space-x-3 px-8 py-3 bg-[var(--color-brutal-bg)] text-white hover:bg-[var(--color-pure-green)] hover:text-[var(--color-brutal-bg)] disabled:opacity-50 transition-colors uppercase tracking-widest font-bold border-2 border-[var(--color-pure-green)]"
                 >
                   <Play className="w-5 h-5" fill="currentColor" />
-                  <span>Sonificar Matriz</span>
+                  <span>[ INICIAR_SONIFICACIÓN ]</span>
                 </button>
              </div>
           </div>
           
           <button 
             onClick={onComplete}
-            className="w-full max-w-2xl flex items-center justify-between px-6 py-4 bg-pure-black text-pure-white hover:bg-gray-800 transition-colors uppercase tracking-widest font-bold mt-8"
+            className="w-full max-w-2xl flex items-center justify-between px-6 py-4 border-2 border-white hover:bg-white hover:text-[var(--color-pure-black)] transition-colors uppercase tracking-widest font-bold mt-8"
           >
-            <span>Avanzar al Colapso Temporal</span>
+            <span>[ INIT_COLAPSO_TEMPORAL ]</span>
             <ChevronRight className="w-5 h-5" />
           </button>
         </div>
