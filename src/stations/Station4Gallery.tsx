@@ -220,6 +220,9 @@ export default function Station4Gallery({ appState, onShowGallery, addLog }: Pro
 
           // Process cumulative RGB points
           if (activeCtx) {
+            activeCtx.globalCompositeOperation = 'source-over';
+            activeCtx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+            activeCtx.fillRect(0, 0, canvas.width, canvas.height);
             activeCtx.globalCompositeOperation = 'screen';
 
             for (let i = particles.length - 1; i >= 0; i--) {
@@ -251,6 +254,8 @@ export default function Station4Gallery({ appState, onShowGallery, addLog }: Pro
 
           // Render the deformed active buffer to the screen
           canvasCtx.globalCompositeOperation = 'source-over';
+          canvasCtx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          canvasCtx.globalCompositeOperation = 'screen';
           canvasCtx.drawImage(activeBuffer, 0, 0, canvas.width, canvas.height);
         };
         draw();

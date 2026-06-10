@@ -205,7 +205,7 @@ export default function Station1Capture({ onComplete, updateState, addLog }: Pro
               autoPlay 
               playsInline 
               muted 
-              className={`w-[300px] h-[300px] md:w-[400px] md:h-[400px] object-cover grayscale opacity-80 mix-blend-screen ${step !== 'camera' ? 'hidden' : ''}`}
+              className={`w-[300px] h-[300px] md:w-[400px] md:h-[400px] object-cover ${step !== 'camera' ? 'hidden' : ''}`}
             />
             <canvas 
               ref={canvasRef} 

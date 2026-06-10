@@ -161,7 +161,7 @@ export default function Station3Video({ onComplete, updateState, addLog }: Props
                 autoPlay 
                 playsInline 
                 muted 
-                className="w-[200px] h-[200px] md:w-[300px] md:h-[300px] object-cover grayscale mix-blend-screen opacity-80"
+                className="w-[200px] h-[200px] md:w-[300px] md:h-[300px] object-cover"
               />
               <div className="absolute bottom-4 right-4 bg-[var(--color-pure-blue)] text-white px-3 py-1 font-bold text-xl brutal-border text-glow-blue">
                 00:{timeLeft.toString().padStart(2, '0')}
