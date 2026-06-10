@@ -49,7 +49,7 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen w-full bg-[var(--color-brutal-bg)] text-pure-white font-mono selection:bg-pure-white selection:text-pure-black flex p-4 md:p-8 gap-4 md:gap-8 h-screen overflow-hidden">
+    <div className="w-full bg-[var(--color-brutal-bg)] text-pure-white font-mono selection:bg-pure-white selection:text-pure-black flex p-4 md:p-8 gap-4 md:gap-8 h-[100dvh] overflow-hidden">
       {/* Main Content Area */}
       <div className="flex-1 brutal-panel p-6 flex flex-col items-center justify-center relative overflow-y-auto">
         {currentStation === 1 && <Station1Capture onComplete={nextStation} appState={appState} updateState={updateState} addLog={addLog} />}

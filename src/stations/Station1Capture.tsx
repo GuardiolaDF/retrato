@@ -205,11 +205,11 @@ export default function Station1Capture({ onComplete, updateState, addLog }: Pro
               autoPlay 
               playsInline 
               muted 
-              className={`w-[300px] h-[300px] md:w-[400px] md:h-[400px] object-cover ${step !== 'camera' ? 'hidden' : ''}`}
+              className={`w-full max-w-[260px] md:max-w-[400px] aspect-square object-cover ${step !== 'camera' ? 'hidden' : ''}`}
             />
             <canvas 
               ref={canvasRef} 
-              className={`w-[300px] h-[300px] md:w-[400px] md:h-[400px] object-cover ${step === 'camera' ? 'hidden' : ''}`}
+              className={`w-full max-w-[260px] md:max-w-[400px] aspect-square object-cover ${step === 'camera' ? 'hidden' : ''}`}
               style={{ imageRendering: 'pixelated', WebkitImageRendering: 'crisp-edges' } as any}
             />
             {step === 'collapsing' && (

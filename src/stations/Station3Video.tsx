@@ -161,7 +161,7 @@ export default function Station3Video({ onComplete, updateState, addLog }: Props
                 autoPlay 
                 playsInline 
                 muted 
-                className="w-[200px] h-[200px] md:w-[300px] md:h-[300px] object-cover"
+                className="w-full max-w-[260px] md:max-w-[300px] aspect-square object-cover"
               />
               <div className="absolute bottom-4 right-4 bg-[var(--color-pure-blue)] text-white px-3 py-1 font-bold text-xl brutal-border text-glow-blue">
                 00:{timeLeft.toString().padStart(2, '0')}
@@ -177,7 +177,7 @@ export default function Station3Video({ onComplete, updateState, addLog }: Props
               ref={canvasRef} 
               width={512} 
               height={512} 
-              className={`w-[300px] h-[300px] md:w-[400px] md:h-[400px] object-cover mix-blend-screen opacity-90 ${step === 'recording' ? 'animate-pulse' : ''}`}
+              className={`w-full max-w-[260px] md:max-w-[400px] aspect-square object-cover mix-blend-screen opacity-90 ${step === 'recording' ? 'animate-pulse' : ''}`}
             />
           </div>
 
