@@ -49,7 +49,7 @@ function App() {
   }
 
   return (
-    <div className="w-full bg-[var(--color-brutal-bg)] text-pure-white font-mono selection:bg-pure-white selection:text-pure-black flex p-4 md:p-8 gap-4 md:gap-8 h-[100dvh] overflow-hidden">
+    <div className="w-full bg-[var(--color-brutal-bg)] text-pure-white font-mono selection:bg-pure-white selection:text-pure-black flex flex-col md:flex-row p-4 md:p-8 gap-4 md:gap-8 min-h-screen h-dvh overflow-hidden">
       {/* Main Content Area */}
       <div className="flex-1 brutal-panel p-6 flex flex-col items-center justify-center relative overflow-y-auto">
         {currentStation === 1 && <Station1Capture onComplete={nextStation} appState={appState} updateState={updateState} addLog={addLog} />}
@@ -63,7 +63,7 @@ function App() {
       </div>
 
       {/* Terminal Area */}
-      <div className="hidden md:block w-1/3 max-w-sm h-full">
+      <div className="h-1/3 md:h-full w-full md:w-1/3 md:max-w-sm">
         <ConsoleLog logs={logs} typingSpeed={20} />
       </div>
     </div>
